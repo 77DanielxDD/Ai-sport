@@ -1,0 +1,84 @@
+HELP.md
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+# 视频上传目录（AI分析项目必须忽略）
+uploaded-videos/
+
+# IDEA
+.idea/
+*.iml
+
+# Maven
+target/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Cloud env secrets
+deploy/cloud/.env
+
+# Secrets / env files
+.env
+.env.*
+**/.env
+**/.env.*
+**/secrets.*
+**/*secret*.txt
+**/*secret*.env
+# Runtime / temp
+.run/
+.m2/
+*.pid
+*.log
+springboot_*.log
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Temp / extract
+temp/
+
+# JMeter reports
+jmeter/report_*
+jmeter/result_*.jtl
+jmeter/results/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,53 @@
+services:
+  ai:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: ai-sport-ai
+    environment:
+      AI_MEDIA_BASE_DIR: /data/output
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./uploaded-videos:/data/uploaded-videos
+      - ./uploaded-videos/output:/data/output
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.4
+    container_name: ai-sport-mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: Dengbaba777
+      MYSQL_DATABASE: ai_sport
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-pDengbaba777"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: ai-sport-rabbitmq
+    ports:
+      - "5673:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+
+volumes:
+  mysql_data:

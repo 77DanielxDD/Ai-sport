@@ -1,0 +1,12 @@
+target
+.git
+.github
+.idea
+.vscode
+.run
+frontend/node_modules
+frontend/dist
+uploaded-videos
+temp
+*.log
+
