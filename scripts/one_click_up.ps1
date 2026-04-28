@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
     [string]$JavaHome = "E:\Amazon Corretto\jdk21.0.11_10",
     [string]$MavenHome = "E:\Apache\apache-maven-3.9.15",
@@ -7,12 +7,14 @@ param(
     [int]$AiPort = 8000,
     [int]$BackendPort = 8080,
     [int]$FrontendPort = 5173,
+    [string]$MediaBaseDir = "",
     [string]$CosRegion = "ap-guangzhou",
     [string]$CosBucket = "",
     [string]$CosSecretId = "",
     [string]$CosSecretKey = "",
     [string]$CosPublicBaseUrl = "",
     [switch]$SkipRabbitMq,
+    [switch]$SkipRedis,
     [switch]$SkipFrontend
 )
 
@@ -129,21 +131,31 @@ Require-NonEmpty -name "CosSecretId" -value $CosSecretId
 Require-NonEmpty -name "CosSecretKey" -value $CosSecretKey
 Require-NonEmpty -name "CosPublicBaseUrl" -value $CosPublicBaseUrl
 
-Write-Step "1) Start RabbitMQ"
-if (-not $SkipRabbitMq) {
-    $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
-    if ($null -eq $dockerCmd) {
-        Write-Warning "docker command not found. Skip RabbitMQ startup."
-    } else {
-        Push-Location $RepoRoot
-        try {
-            & docker compose up -d rabbitmq | Out-Host
-        } finally {
-            Pop-Location
-        }
-    }
+if ([string]::IsNullOrWhiteSpace($MediaBaseDir)) {
+    $MediaBaseDir = Join-Path $RepoRoot "ai-service\uploaded-videos\output"
+}
+
+Write-Step "1) Start infrastructure (RabbitMQ + Redis)"
+$dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+if ($null -eq $dockerCmd) {
+    Write-Warning "docker command not found. Skip RabbitMQ/Redis startup."
 } else {
-    Write-Host "SkipRabbitMq specified."
+    Push-Location $RepoRoot
+    try {
+        if (-not $SkipRabbitMq -and -not $SkipRedis) {
+            & docker compose up -d rabbitmq redis | Out-Host
+        } elseif (-not $SkipRabbitMq) {
+            & docker compose up -d rabbitmq | Out-Host
+            Write-Host "SkipRedis specified."
+        } elseif (-not $SkipRedis) {
+            & docker compose up -d redis | Out-Host
+            Write-Host "SkipRabbitMq specified."
+        } else {
+            Write-Host "SkipRabbitMq and SkipRedis specified."
+        }
+    } finally {
+        Pop-Location
+    }
 }
 
 Write-Step "2) Start local AI service"
@@ -158,10 +170,10 @@ Start-ManagedProcess -Name "ai" -FilePath "cmd.exe" -ArgumentList @(
 ) -WorkingDirectory $aiDir
 Wait-Http -Name "AI" -Url "http://127.0.0.1:$AiPort/health" -TimeoutSec 60 | Out-Null
 
-Write-Step "3) Start Spring Boot (COS enabled)"
+Write-Step "3) Start Spring Boot (COS + Redis cache enabled)"
 Start-ManagedProcess -Name "backend" -FilePath "cmd.exe" -ArgumentList @(
     "/c",
-    "set `"JAVA_HOME=$JavaHome`" && set `"PATH=$JavaHome\bin;$MavenHome\bin;$GitHome\bin;%PATH%`" && set `"DEV_OBJECT_STORAGE_ENABLED=true`" && set `"DEV_OBJECT_STORAGE_PROVIDER=cos`" && set `"DEV_OBJECT_STORAGE_REGION=$CosRegion`" && set `"DEV_OBJECT_STORAGE_BUCKET=$CosBucket`" && set `"DEV_OBJECT_STORAGE_ACCESS_KEY=$CosSecretId`" && set `"DEV_OBJECT_STORAGE_SECRET_KEY=$CosSecretKey`" && set `"DEV_OBJECT_STORAGE_PUBLIC_BASE_URL=$CosPublicBaseUrl`" && mvn -q -DskipTests spring-boot:run"
+    "set `"JAVA_HOME=$JavaHome`" && set `"PATH=$JavaHome\bin;$MavenHome\bin;$GitHome\bin;%PATH%`" && set `"DEV_OBJECT_STORAGE_ENABLED=true`" && set `"DEV_OBJECT_STORAGE_PROVIDER=cos`" && set `"DEV_OBJECT_STORAGE_REGION=$CosRegion`" && set `"DEV_OBJECT_STORAGE_BUCKET=$CosBucket`" && set `"DEV_OBJECT_STORAGE_ACCESS_KEY=$CosSecretId`" && set `"DEV_OBJECT_STORAGE_SECRET_KEY=$CosSecretKey`" && set `"DEV_OBJECT_STORAGE_PUBLIC_BASE_URL=$CosPublicBaseUrl`" && set `"DEV_MEDIA_BASE_DIR=$MediaBaseDir`" && set `"APP_MEDIA_BASE_DIR=$MediaBaseDir`" && set `"APP_REDIS_CACHE_ENABLED=true`" && set `"APP_REDIS_HOST=127.0.0.1`" && set `"APP_REDIS_PORT=6379`" && mvn -q -DskipTests spring-boot:run"
 ) -WorkingDirectory $RepoRoot
 Wait-Http -Name "Backend" -Url "http://127.0.0.1:$BackendPort/api/system/health" -TimeoutSec 120 | Out-Null
 
@@ -170,8 +182,17 @@ if ($SkipFrontend) {
     Write-Host "SkipFrontend specified."
 } else {
     $frontendDir = Join-Path $RepoRoot "frontend"
-    Start-ManagedProcess -Name "frontend" -FilePath "cmd.exe" -ArgumentList @("/c", "npm run dev") -WorkingDirectory $frontendDir
-    Wait-Http -Name "Frontend" -Url "http://127.0.0.1:$FrontendPort" -TimeoutSec 45 | Out-Null
+    if (-not (Test-Path (Join-Path $frontendDir "node_modules"))) {
+        Write-Host "Installing frontend dependencies..."
+        Push-Location $frontendDir
+        try {
+            & cmd.exe /c "npm install" | Out-Host
+        } finally {
+            Pop-Location
+        }
+    }
+    Start-ManagedProcess -Name "frontend" -FilePath "cmd.exe" -ArgumentList @("/c", "npm run dev -- --host 0.0.0.0 --port $FrontendPort") -WorkingDirectory $frontendDir
+    Wait-Http -Name "Frontend" -Url "http://127.0.0.1:$FrontendPort" -TimeoutSec 60 | Out-Null
 }
 
 Write-Step "Done"

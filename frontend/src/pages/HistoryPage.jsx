@@ -23,7 +23,7 @@ export default function HistoryPage() {
   }, [videos, status, type]);
 
   async function handleDelete(videoId) {
-    const ok = window.confirm(`确认删除视频 #${videoId} 及其分析报告吗？此操作不可恢复。`);
+    const ok = window.confirm(`确认删除视频 #${videoId} 及其分析结果吗？此操作不可恢复。`);
     if (!ok) return;
 
     setDeletingId(videoId);
@@ -47,6 +47,7 @@ export default function HistoryPage() {
       setError("");
       return;
     }
+
     const ok = window.confirm(`确认删除当前筛选结果中的 ${targetCount} 条记录吗？此操作不可恢复。`);
     if (!ok) return;
 
@@ -133,6 +134,7 @@ export default function HistoryPage() {
                   <div className="inline-actions">
                     <Link to={`/tasks/${v.id}`}>任务</Link>
                     <Link to={`/reports/${v.id}`}>报告</Link>
+                    <Link to={`/reports/${v.id}#qa`}>训练问答</Link>
                     <button
                       type="button"
                       className="danger-btn"

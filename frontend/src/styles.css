@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --bg-start: #f3f7ff;
   --bg-end: #eef6ef;
   --panel: #ffffff;
@@ -267,6 +267,23 @@ pre {
   border: 1px solid #cbd8ec;
 }
 
+.report-image {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid #cbd8ec;
+  background: #f2f6fd;
+  display: block;
+}
+
+.report-image-fallback {
+  display: grid;
+  place-items: center;
+  color: #5f6f89;
+  font-size: 13px;
+}
+
 figure { margin: 0; }
 figcaption {
   font-size: 12px;
@@ -404,4 +421,16 @@ figcaption {
   .grid2 {
     grid-template-columns: 1fr;
   }
+}
+
+.qa-action-btn {
+  width: 120px !important;
+  min-width: 120px;
+  height: 38px;
+  margin: 0 !important;
+  padding: 0 12px !important;
+  border-radius: 10px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }

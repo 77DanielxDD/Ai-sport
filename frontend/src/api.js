@@ -230,4 +230,81 @@ export function deleteCurrentUserAccount(currentPassword) {
   });
 }
 
+
+export function askRagQa(question, videoId) {
+  return request("/api/rag/qa", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, videoId }),
+  });
+}
+
+export async function streamRagQa({ question, videoId, onChunk, onDone, onError, signal }) {
+  const token = getToken();
+  const resp = await fetch(`${API_BASE}/api/rag/qa/stream`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ question, videoId }),
+    signal,
+  });
+
+  if (!resp.ok || !resp.body) {
+    let message = `stream request failed (${resp.status})`;
+    try {
+      const text = await resp.text();
+      if (text) message = text;
+    } catch {
+    }
+    const err = new Error(message);
+    if (onError) onError(err);
+    throw err;
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    while (true) {
+      const idx = buffer.indexOf("\n\n");
+      if (idx < 0) break;
+      const eventText = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+
+      const lines = eventText.split("\n");
+      let eventName = "message";
+      let data = "";
+      for (const line of lines) {
+        if (line.startsWith("event:")) {
+          eventName = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+          data += line.slice(5);
+        }
+      }
+
+      if (eventName === "chunk") {
+        if (onChunk) onChunk(data);
+      } else if (eventName === "done") {
+        if (onDone) onDone();
+      } else if (eventName === "error") {
+        const err = new Error(data || "stream error");
+        if (onError) onError(err);
+        throw err;
+      }
+    }
+  }
+
+  if (onDone) onDone();
+}
 export { API_BASE };
+
+
+

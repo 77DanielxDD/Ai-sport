@@ -1,6 +1,7 @@
 ﻿param(
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
-    [switch]$StopRabbitMq
+    [switch]$StopRabbitMq,
+    [switch]$StopRedis
 )
 
 Set-StrictMode -Version Latest
@@ -55,23 +56,29 @@ Stop-ManagedProcess "frontend"
 Stop-ManagedProcess "backend"
 Stop-ManagedProcess "ai"
 
-Write-Step "2) Optional RabbitMQ stop"
-if ($StopRabbitMq) {
+Write-Step "2) Optional RabbitMQ/Redis stop"
+if ($StopRabbitMq -or $StopRedis) {
     $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
     if ($null -eq $dockerCmd) {
-        Write-Warning "docker command not found. Skip RabbitMQ stop."
+        Write-Warning "docker command not found. Skip RabbitMQ/Redis stop."
     } else {
         Push-Location $RepoRoot
         try {
-            & docker compose stop rabbitmq | Out-Host
+            if ($StopRabbitMq -and $StopRedis) {
+                & docker compose stop rabbitmq redis | Out-Host
+            } elseif ($StopRabbitMq) {
+                & docker compose stop rabbitmq | Out-Host
+            } else {
+                & docker compose stop redis | Out-Host
+            }
         } finally {
             Pop-Location
         }
     }
 } else {
-    Write-Host "RabbitMQ kept running. Use -StopRabbitMq to stop it."
+    Write-Host "RabbitMQ/Redis kept running. Use -StopRabbitMq and/or -StopRedis to stop them."
 }
 
 Write-Step "Done"
 Write-Host "You can restart everything with:"
-Write-Host "  powershell -ExecutionPolicy Bypass -File scripts/dev_up.ps1"
+Write-Host "  powershell -ExecutionPolicy Bypass -File scripts/start_cos.ps1 ..."

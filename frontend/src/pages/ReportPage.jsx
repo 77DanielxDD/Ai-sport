@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { API_BASE, getVideoAnalysis } from "../api";
+import { API_BASE, askRagQa, getVideoAnalysis, streamRagQa } from "../api";
 import StatusPill from "../components/StatusPill";
 import SimpleLineChart from "../components/SimpleLineChart";
 import { exerciseTypeLabel } from "../utils/exerciseType";
@@ -10,14 +10,44 @@ export default function ReportPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
 
+  const [question, setQuestion] = useState("");
+  const [qaAnswer, setQaAnswer] = useState("");
+  const [qaError, setQaError] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [brokenImages, setBrokenImages] = useState({});
+  const abortRef = useRef(null);
+
   useEffect(() => {
-    getVideoAnalysis(videoId).then(setData).catch((e) => setError(e.body?.message || e.body?.error || e.message));
+    getVideoAnalysis(videoId)
+      .then((resp) => {
+        setData(resp);
+        setBrokenImages({});
+      })
+      .catch((e) => setError(e.body?.message || e.body?.error || e.message));
   }, [videoId]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#qa") {
+      const el = document.getElementById("rag-qa-card");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+  }, [data]);
+
+  useEffect(() => {
+    return () => {
+      if (abortRef.current) {
+        abortRef.current.abort();
+      }
+    };
+  }, []);
 
   const analysis = useMemo(() => data?.analysis || {}, [data]);
   const reportImages = analysis.report_images || [];
   const tips = analysis.tips || [];
   const trainingScore = analysis.trainingScore || null;
+
   const linePoints = useMemo(() => {
     return tips
       .filter((t) => typeof t.rep_index !== "undefined" && typeof t.min_angle !== "undefined")
@@ -28,8 +58,12 @@ export default function ReportPage() {
 
   const resolveImageUrl = (url) => {
     if (!url) return "";
-    if (String(url).startsWith("http://") || String(url).startsWith("https://")) return url;
-    return `${API_BASE}${url}`;
+    const raw = String(url).trim();
+    if (!raw) return "";
+    if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+    if (raw.startsWith("/")) return `${API_BASE}${raw}`;
+    if (raw.startsWith("media/")) return `${API_BASE}/${raw}`;
+    return `${API_BASE}/${raw}`;
   };
 
   function downloadJson() {
@@ -43,11 +77,60 @@ export default function ReportPage() {
     URL.revokeObjectURL(url);
   }
 
+  async function askRag() {
+    const q = question.trim();
+    if (!q) {
+      setQaError("请输入你想追问的问题");
+      return;
+    }
+
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setQaAnswer("");
+    setQaError("");
+    setStreaming(true);
+
+    try {
+      await streamRagQa({
+        question: q,
+        videoId: Number(videoId),
+        signal: controller.signal,
+        onChunk: (chunk) => setQaAnswer((prev) => prev + chunk),
+        onError: (err) => setQaError(err?.message || "问答失败"),
+      });
+    } catch (e) {
+      if (e?.name !== "AbortError") {
+        try {
+          const fallback = await askRagQa(q, Number(videoId));
+          setQaAnswer(fallback?.answer || "未获取到回答");
+          setQaError("流式通道异常，已自动切换为普通回答");
+        } catch (e2) {
+          setQaError(e2?.body?.error || e2?.message || e?.message || "问答失败");
+        }
+      }
+    } finally {
+      setStreaming(false);
+      abortRef.current = null;
+    }
+  }
+
+  function stopStream() {
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    setStreaming(false);
+  }
+
   return (
     <div>
       <h1>分析报告 #{videoId}</h1>
       {error && <p className="error">{error}</p>}
       {!data && !error && <p>报告加载中...</p>}
+
       {data && (
         <>
           <div className="grid2">
@@ -61,8 +144,12 @@ export default function ReportPage() {
               <p>动作次数：{analysis.rep_count ?? "-"}</p>
               <p>分析耗时：{analysis.processing_time_ms ?? "-"} ms</p>
               <p>端到端耗时：{data.endToEndMs ?? "-"} ms</p>
-              <p>训练评分：{trainingScore?.finalScore != null ? `${trainingScore.finalScore} (${trainingScore.level})` : "-"}</p>
+              <p>
+                训练评分：{" "}
+                {trainingScore?.finalScore != null ? `${trainingScore.finalScore} (${trainingScore.level})` : "-"}
+              </p>
             </div>
+
             <div className="card">
               <h3>动作建议</h3>
               {tips.length === 0 ? (
@@ -79,18 +166,59 @@ export default function ReportPage() {
             </div>
           </div>
 
+          <div id="rag-qa-card" className="card">
+            <h3>训练问答（RAG）</h3>
+            <p>你可以继续追问，例如：我的下蹲幅度不足，具体应该怎么练？</p>
+            <div className="grid2">
+              <div>
+                <textarea
+                  rows={3}
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  placeholder="输入你的训练问题..."
+                />
+              </div>
+              <div>
+                <div className="inline-actions">
+                  <button className="qa-action-btn" onClick={askRag} disabled={streaming}>
+                    {streaming ? "回答生成中..." : "开始追问"}
+                  </button>
+                  <button type="button" className="danger-btn qa-action-btn" onClick={stopStream} disabled={!streaming}>
+                    停止
+                  </button>
+                </div>
+                {qaError && <p className="error">{qaError}</p>}
+              </div>
+            </div>
+            <pre style={{ whiteSpace: "pre-wrap", minHeight: 140 }}>{qaAnswer || "等待你的提问..."}</pre>
+          </div>
+
           <div className="card">
             <h3>关键帧图集</h3>
             {reportImages.length === 0 ? (
               <p>暂无关键帧</p>
             ) : (
               <div className="img-grid">
-                {reportImages.map((url) => (
-                  <figure key={url}>
-                    <img src={resolveImageUrl(url)} alt={url} />
-                    <figcaption>{url}</figcaption>
-                  </figure>
-                ))}
+                {reportImages.map((url, idx) => {
+                  const resolved = resolveImageUrl(url);
+                  const broken = !!brokenImages[url];
+                  return (
+                    <figure key={`${url}-${idx}`}>
+                      {!broken ? (
+                        <img
+                          className="report-image"
+                          src={resolved}
+                          alt={`keyframe-${idx + 1}`}
+                          loading="lazy"
+                          onError={() => setBrokenImages((prev) => ({ ...prev, [url]: true }))}
+                        />
+                      ) : (
+                        <div className="report-image report-image-fallback">图片加载失败</div>
+                      )}
+                      <figcaption>{resolved || url}</figcaption>
+                    </figure>
+                  );
+                })}
               </div>
             )}
           </div>

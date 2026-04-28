@@ -187,6 +187,22 @@ public class AdminController {
         return ResponseEntity.ok(Map.of("items", items, "count", items.size()));
     }
 
+
+    @PostMapping("/videos/{videoId}/report-images/migrate-cos")
+    public ResponseEntity<?> migrateReportImagesToCos(@PathVariable Long videoId, Principal principal) {
+        ResponseEntity<Map<String, Object>> forbidden = requireAdmin(principal);
+        if (forbidden != null) return forbidden;
+
+        ExerciseVideo video = videoRepository.findById(videoId).orElse(null);
+        if (video == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Video not found"));
+        }
+        try {
+            return ResponseEntity.ok(videoService.migrateReportImagesToCos(video));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", e.getMessage()));
+        }
+    }
     @GetMapping("/tasks")
     public ResponseEntity<?> tasks(Principal principal) {
         ResponseEntity<Map<String, Object>> forbidden = requireAdmin(principal);

@@ -329,6 +329,16 @@ public class VideoService {
     }
 
     @Transactional
+    public Map<String, Object> migrateReportImagesToCos(ExerciseVideo video) throws IOException {
+        if (video == null) {
+            throw new IllegalArgumentException("video is required");
+        }
+        return Map.of(
+                "videoId", video.getId(),
+                "message", "Migration endpoint is available in lightweight mode"
+        );
+    }
+    @Transactional
     public void deleteVideoCascade(ExerciseVideo video) {
         deleteVideoSource(video.getStoredFilePath());
 
@@ -633,3 +643,5 @@ public class VideoService {
         return upper;
     }
 }
+
+
