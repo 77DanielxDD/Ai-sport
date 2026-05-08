@@ -5,12 +5,14 @@ import com.example.aisport.repository.ExerciseVideoRepository;
 import com.example.aisport.service.VideoService;
 import com.example.aisport.task.AnalysisTaskService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
 
 @Service
+@Lazy(false)
 public class VideoAnalysisConsumer {
 
     private final VideoService videoService;

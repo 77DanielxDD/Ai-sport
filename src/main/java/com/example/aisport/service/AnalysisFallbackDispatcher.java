@@ -55,4 +55,15 @@ public class AnalysisFallbackDispatcher {
             });
         }
     }
+
+    @Async("analysisFallbackExecutor")
+    public void dispatchIfStillQueued(Long videoId, Long taskId, long delayMs) {
+        try {
+            Thread.sleep(Math.max(0L, delayMs));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
+        }
+        dispatch(videoId, taskId);
+    }
 }

@@ -179,6 +179,8 @@ public class VideoService {
     public void dispatchAnalysisTask(ExerciseVideo video, AnalysisTask task) {
         try {
             videoAnalysisProducer.sendAnalysisTask(video, task);
+            // If MQ send succeeds but no active consumer, fallback will take over soon.
+            analysisFallbackDispatcher.dispatchIfStillQueued(video.getId(), task.getId(), 5000L);
         } catch (Exception mqEx) {
             if (!fallbackLocalAsyncWhenMqDown) {
                 throw new RuntimeException("MQ unavailable and local fallback disabled: " + mqEx.getMessage(), mqEx);

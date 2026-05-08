@@ -1,4 +1,4 @@
-export const EXERCISE_TYPE_LABELS = {
+﻿export const EXERCISE_TYPE_LABELS = {
   PUSHUP: "俯卧撑",
   SQUAT: "深蹲",
   BENCH_PRESS: "卧推",

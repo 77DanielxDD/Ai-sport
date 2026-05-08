@@ -1,60 +1,73 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { API_BASE, askRagQa, getVideoAnalysis, streamRagQa } from "../api";
-import StatusPill from "../components/StatusPill";
-import SimpleLineChart from "../components/SimpleLineChart";
 import { exerciseTypeLabel } from "../utils/exerciseType";
+import SimpleLineChart from "../components/SimpleLineChart";
+
+function toArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function getFinalScore(trainingScore) {
+  if (trainingScore == null) return null;
+  if (typeof trainingScore === "number") return trainingScore;
+  if (typeof trainingScore === "object") {
+    const raw = trainingScore.finalScore ?? trainingScore.score ?? null;
+    const n = Number(raw);
+    return Number.isNaN(n) ? null : n;
+  }
+  const n = Number(trainingScore);
+  return Number.isNaN(n) ? null : n;
+}
 
 export default function ReportPage() {
   const { videoId } = useParams();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
-
   const [question, setQuestion] = useState("");
   const [qaAnswer, setQaAnswer] = useState("");
   const [qaError, setQaError] = useState("");
   const [streaming, setStreaming] = useState(false);
-  const [brokenImages, setBrokenImages] = useState({});
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [showLightbox, setShowLightbox] = useState(false);
   const abortRef = useRef(null);
 
   useEffect(() => {
     getVideoAnalysis(videoId)
-      .then((resp) => {
-        setData(resp);
-        setBrokenImages({});
-      })
+      .then((resp) => setData(resp))
       .catch((e) => setError(e.body?.message || e.body?.error || e.message));
   }, [videoId]);
 
-  useEffect(() => {
-    if (typeof window !== "undefined" && window.location.hash === "#qa") {
-      const el = document.getElementById("rag-qa-card");
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }
-  }, [data]);
-
-  useEffect(() => {
-    return () => {
-      if (abortRef.current) {
-        abortRef.current.abort();
-      }
-    };
-  }, []);
-
   const analysis = useMemo(() => data?.analysis || {}, [data]);
-  const reportImages = analysis.report_images || [];
-  const tips = analysis.tips || [];
-  const trainingScore = analysis.trainingScore || null;
+  const reportImages = useMemo(() => toArray(analysis.report_images), [analysis]);
+  const tips = useMemo(() => toArray(analysis.tips), [analysis]);
+  const trainingScore = useMemo(() => getFinalScore(analysis.trainingScore), [analysis]);
 
-  const linePoints = useMemo(() => {
-    return tips
-      .filter((t) => typeof t.rep_index !== "undefined" && typeof t.min_angle !== "undefined")
-      .map((t) => ({ x: Number(t.rep_index), y: Number(t.min_angle) }))
-      .filter((p) => !Number.isNaN(p.x) && !Number.isNaN(p.y))
-      .sort((a, b) => a.x - b.x);
-  }, [tips]);
+  const linePoints = useMemo(
+    () =>
+      tips
+        .filter((t) => t && typeof t === "object")
+        .filter((t) => typeof t.rep_index !== "undefined" && typeof t.min_angle !== "undefined")
+        .map((t) => ({ x: Number(t.rep_index), y: Number(t.min_angle) }))
+        .filter((p) => !Number.isNaN(p.x) && !Number.isNaN(p.y))
+        .sort((a, b) => a.x - b.x),
+    [tips],
+  );
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [videoId, reportImages.length]);
+
+  const activeImage = reportImages[activeIndex] || reportImages[0] || "";
 
   const resolveImageUrl = (url) => {
     if (!url) return "";
@@ -66,28 +79,20 @@ export default function ReportPage() {
     return `${API_BASE}/${raw}`;
   };
 
-  function downloadJson() {
-    if (!data) return;
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `report_${videoId}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  function prevImage() {
+    if (reportImages.length <= 1) return;
+    setActiveIndex((i) => (i - 1 + reportImages.length) % reportImages.length);
+  }
+
+  function nextImage() {
+    if (reportImages.length <= 1) return;
+    setActiveIndex((i) => (i + 1) % reportImages.length);
   }
 
   async function askRag() {
     const q = question.trim();
-    if (!q) {
-      setQaError("请输入你想追问的问题");
-      return;
-    }
-
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
-
+    if (!q) return setQaError("请输入追问内容");
+    if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setQaAnswer("");
@@ -107,137 +112,111 @@ export default function ReportPage() {
         try {
           const fallback = await askRagQa(q, Number(videoId));
           setQaAnswer(fallback?.answer || "未获取到回答");
-          setQaError("流式通道异常，已自动切换为普通回答");
         } catch (e2) {
-          setQaError(e2?.body?.error || e2?.message || e?.message || "问答失败");
+          setQaError(e2?.body?.error || e2?.message || "问答失败");
         }
       }
     } finally {
       setStreaming(false);
-      abortRef.current = null;
     }
   }
 
   function stopStream() {
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
+    if (abortRef.current) abortRef.current.abort();
     setStreaming(false);
   }
 
+  if (error) return <p className="error">{error}</p>;
+  if (!data) return <p>加载报告中...</p>;
+
   return (
     <div>
-      <h1>分析报告 #{videoId}</h1>
-      {error && <p className="error">{error}</p>}
-      {!data && !error && <p>报告加载中...</p>}
+      <div className="card">
+        <h1>分析报告 #{videoId}</h1>
+        <p>动作类型：<b>{exerciseTypeLabel(analysis.exercise_type || data.exerciseType)}</b></p>
+        <p>训练评分：<b>{trainingScore ?? "-"}</b></p>
+      </div>
 
-      {data && (
-        <>
-          <div className="grid2">
-            <div className="card">
-              <h3>概要</h3>
-              <p>
-                状态：<StatusPill status={data.status} />
-              </p>
-              <p>动作：{exerciseTypeLabel(analysis.exercise_type || analysis.exerciseType)}</p>
-              <p>获取时间：{data.retrievedAt}</p>
-              <p>动作次数：{analysis.rep_count ?? "-"}</p>
-              <p>分析耗时：{analysis.processing_time_ms ?? "-"} ms</p>
-              <p>端到端耗时：{data.endToEndMs ?? "-"} ms</p>
-              <p>
-                训练评分：{" "}
-                {trainingScore?.finalScore != null ? `${trainingScore.finalScore} (${trainingScore.level})` : "-"}
-              </p>
-            </div>
-
-            <div className="card">
-              <h3>动作建议</h3>
-              {tips.length === 0 ? (
-                <p>暂无建议</p>
-              ) : (
-                <ul>
-                  {tips.map((t, idx) => (
-                    <li key={idx}>
-                      第 {t.rep_index} 次：角度={t.min_angle} 度，{t.tip}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
-          <div id="rag-qa-card" className="card">
-            <h3>训练问答（RAG）</h3>
-            <p>你可以继续追问，例如：我的下蹲幅度不足，具体应该怎么练？</p>
-            <div className="grid2">
-              <div>
-                <textarea
-                  rows={3}
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  placeholder="输入你的训练问题..."
+      <div className="report-layout report-layout-top">
+        <div className="card">
+          <h3>关键帧图集</h3>
+          {reportImages.length === 0 ? (
+            <p>暂无关键帧</p>
+          ) : (
+            <>
+              <div className="report-main-image-wrap">
+                <button type="button" className="report-nav-btn left" onClick={prevImage} disabled={reportImages.length <= 1}>‹</button>
+                <img
+                  className="report-image report-image-main"
+                  src={resolveImageUrl(activeImage)}
+                  alt={`rep-${activeIndex + 1}`}
+                  onClick={() => setShowLightbox(true)}
+                  role="button"
                 />
+                <button type="button" className="report-nav-btn right" onClick={nextImage} disabled={reportImages.length <= 1}>›</button>
               </div>
-              <div>
-                <div className="inline-actions">
-                  <button className="qa-action-btn" onClick={askRag} disabled={streaming}>
-                    {streaming ? "回答生成中..." : "开始追问"}
+
+              <div className="report-thumbs">
+                {reportImages.map((img, idx) => (
+                  <button
+                    type="button"
+                    key={idx}
+                    className={`report-thumb${idx === activeIndex ? " active" : ""}`}
+                    onClick={() => setActiveIndex(idx)}
+                  >
+                    <img src={resolveImageUrl(img)} alt={`thumb-${idx + 1}`} />
+                    <span>Rep {idx + 1}</span>
                   </button>
-                  <button type="button" className="danger-btn qa-action-btn" onClick={stopStream} disabled={!streaming}>
-                    停止
-                  </button>
-                </div>
-                {qaError && <p className="error">{qaError}</p>}
+                ))}
               </div>
-            </div>
-            <pre style={{ whiteSpace: "pre-wrap", minHeight: 140 }}>{qaAnswer || "等待你的提问..."}</pre>
-          </div>
+            </>
+          )}
+        </div>
 
-          <div className="card">
-            <h3>关键帧图集</h3>
-            {reportImages.length === 0 ? (
-              <p>暂无关键帧</p>
-            ) : (
-              <div className="img-grid">
-                {reportImages.map((url, idx) => {
-                  const resolved = resolveImageUrl(url);
-                  const broken = !!brokenImages[url];
-                  return (
-                    <figure key={`${url}-${idx}`}>
-                      {!broken ? (
-                        <img
-                          className="report-image"
-                          src={resolved}
-                          alt={`keyframe-${idx + 1}`}
-                          loading="lazy"
-                          onError={() => setBrokenImages((prev) => ({ ...prev, [url]: true }))}
-                        />
-                      ) : (
-                        <div className="report-image report-image-fallback">图片加载失败</div>
-                      )}
-                      <figcaption>{resolved || url}</figcaption>
-                    </figure>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+        <aside className="card tips-panel tips-panel-wide">
+          <h3>动作建议</h3>
+          {tips.length === 0 ? <p>暂无建议</p> : (
+            <ul>
+              {tips.map((t, idx) => {
+                if (typeof t === "string") {
+                  return <li key={idx}>Rep {idx + 1}：{t}</li>;
+                }
+                return (
+                  <li key={idx}>
+                    Rep {t?.rep_index ?? idx + 1}：{t?.tip || "-"}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </aside>
+      </div>
 
-          <div className="card">
-            <h3>角度趋势图（按次数）</h3>
-            <SimpleLineChart points={linePoints} />
-          </div>
+      <div className="card">
+        <h3>角度曲线</h3>
+        <SimpleLineChart points={linePoints} yMin={0} yMax={180} height={240} xLabel="重复次数" yLabel="最低角度" />
+      </div>
 
-          <div className="card">
-            <h3>导出</h3>
-            <button onClick={downloadJson}>下载报告数据（JSON）</button>
-          </div>
+      <div id="rag-qa-card" className="card">
+        <h3>训练追问（AI教练）</h3>
+        <textarea
+          rows={3}
+          placeholder="例：我深蹲膝盖痛怎么改"
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+        />
+        <div className="inline-actions" style={{ marginBottom: 8 }}>
+          <button className="qa-action-btn" disabled={streaming} onClick={askRag}>开始追问</button>
+          <button className="qa-action-btn ghost" disabled={!streaming} onClick={stopStream}>停止</button>
+        </div>
+        {qaError && <p className="error">{qaError}</p>}
+        <pre>{qaAnswer || "等待回答..."}</pre>
+      </div>
 
-          <div className="card">
-            <h3>原始数据（JSON）</h3>
-            <pre>{JSON.stringify(data, null, 2)}</pre>
-          </div>
-        </>
+      {showLightbox && (
+        <div className="report-lightbox" onClick={() => setShowLightbox(false)}>
+          <img src={resolveImageUrl(activeImage)} alt={`lightbox-${activeIndex + 1}`} onClick={(e) => e.stopPropagation()} />
+        </div>
       )}
     </div>
   );

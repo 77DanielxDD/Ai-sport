@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8080";
+﻿const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8080";
 
 export function getToken() {
   return localStorage.getItem("ai_sport_token") || "";
@@ -305,6 +305,7 @@ export async function streamRagQa({ question, videoId, onChunk, onDone, onError,
   if (onDone) onDone();
 }
 export { API_BASE };
+
 
 
 

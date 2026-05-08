@@ -9,6 +9,7 @@
     [string]$CosSecretId = "",
     [string]$CosSecretKey = "",
     [string]$CosPublicBaseUrl = "",
+    [string]$DbPassword = "",
     [switch]$SkipFrontend,
     [switch]$SkipRedis
 )
@@ -45,6 +46,7 @@ $params = @{
     CosSecretId      = $CosSecretId
     CosSecretKey     = $CosSecretKey
     CosPublicBaseUrl = $CosPublicBaseUrl
+    DbPassword       = $DbPassword
 }
 if ($SkipFrontend.IsPresent) {
     $params["SkipFrontend"] = $true
