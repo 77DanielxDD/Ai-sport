@@ -1,0 +1,5 @@
+video_file,username,password,exercise_type
+testdata/videos/pushup_10s.mp4,test_user_2,123456,PUSHUP
+testdata/videos/squat_12s.mp4,test_user_2,123456,SQUAT
+testdata/videos/bench_press_12s.mp4,test_user_2,123456,BENCH_PRESS
+testdata/videos/deadlift_14s.mp4,test_user_2,123456,DEADLIFT

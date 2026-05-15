@@ -1,0 +1,2 @@
+num_videos,num_with_prediction,action_accuracy,pck_mean,pck_overall,pck_total_points,angle_mae_mean_deg,angle_mae_overall_deg,angle_pairs_total
+60,0,,,,0,,,0
