@@ -1,3 +1,5 @@
+import useStore from "./store";
+
 const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8080";
 
 export function getToken() {
@@ -92,7 +94,10 @@ export function uploadVideo({ file, exerciseType }) {
   const form = new FormData();
   form.append("file", file);
   form.append("exerciseType", exerciseType);
-  return request("/api/videos/upload", { method: "POST", body: form });
+  return request("/api/videos/upload", { method: "POST", body: form }).then((r) => {
+    useStore.getState().setVideos([]); // Invalidate cache
+    return r;
+  });
 }
 
 export function getVideoStatus(videoId) {
@@ -110,11 +115,15 @@ export function compareVideos(leftId, rightId) {
   return request(`/api/videos/compare?${query.toString()}`);
 }
 
-export function listVideos() {
+export function listVideos({ forceRefresh = false } = {}) {
+  if (!forceRefresh) {
+    const state = useStore.getState();
+    if (!state.isVideoListStale() && state.videos.length > 0) return Promise.resolve(state.videos);
+  }
   return request("/api/videos").then((data) => {
-    if (Array.isArray(data)) return data;
-    if (data && Array.isArray(data.items)) return data.items;
-    return [];
+    const items = Array.isArray(data) ? data : data?.items || [];
+    useStore.getState().setVideos(items);
+    return items;
   });
 }
 
@@ -222,11 +231,27 @@ export function adminTasks() {
   return request("/api/admin/tasks");
 }
 
+export function askQuestion(question, videoId = null) {
+  return request("/api/rag/qa", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, videoId }),
+  });
+}
+
 export function deleteCurrentUserAccount(currentPassword) {
   return request("/api/users/me/delete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ currentPassword }),
+  });
+}
+
+export function askAgent(question, videoId = null) {
+  return request("/api/agent/qa", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, videoId }),
   });
 }
 

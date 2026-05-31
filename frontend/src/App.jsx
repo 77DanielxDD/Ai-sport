@@ -11,6 +11,7 @@ import ExperimentsPage from "./pages/ExperimentsPage";
 import AdminPage from "./pages/AdminPage";
 import ProfilePage from "./pages/ProfilePage";
 import ComparePage from "./pages/ComparePage";
+import QaPage from "./pages/QaPage";
 import { getToken } from "./api";
 
 function Protected({ children }) {
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="upload" element={<UploadPage />} />
         <Route path="history" element={<HistoryPage />} />
         <Route path="compare" element={<ComparePage />} />
+        <Route path="qa" element={<QaPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="tasks/:videoId" element={<TaskPage />} />
         <Route path="reports/:videoId" element={<ReportPage />} />

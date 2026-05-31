@@ -12,142 +12,88 @@ export default function HistoryPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    listVideos().then(setVideos).catch(() => setVideos([]));
-  }, []);
+  useEffect(() => { listVideos().then(setVideos).catch(() => setVideos([])); }, []);
 
-  const filtered = useMemo(() => {
-    return videos.filter(
-      (v) => (status === "ALL" || v.status === status) && (type === "ALL" || v.exerciseType === type),
-    );
-  }, [videos, status, type]);
+  const filtered = useMemo(() =>
+    videos.filter((v) => (status === "ALL" || v.status === status) && (type === "ALL" || v.exerciseType === type)),
+    [videos, status, type]);
 
   async function handleDelete(videoId) {
-    const ok = window.confirm(`确认删除视频 #${videoId} 及其分析报告吗？此操作不可恢复。`);
-    if (!ok) return;
-
-    setDeletingId(videoId);
-    setMessage("");
-    setError("");
-    try {
-      await deleteVideo(videoId);
-      setVideos((prev) => prev.filter((v) => v.id !== videoId));
-      setMessage(`视频 #${videoId} 已删除`);
-    } catch (e) {
-      setError(e?.body?.error || e.message || "删除失败");
-    } finally {
-      setDeletingId(null);
-    }
+    if (!window.confirm(`确认删除视频 #${videoId}？不可恢复。`)) return;
+    setDeletingId(videoId); setMessage(""); setError("");
+    try { await deleteVideo(videoId); setVideos((p) => p.filter((v) => v.id !== videoId)); setMessage(`已删除 #${videoId}`); }
+    catch (e) { setError(e?.body?.error || e.message || "删除失败"); }
+    finally { setDeletingId(null); }
   }
 
   async function handleBulkDelete() {
-    const targetCount = filtered.length;
-    if (targetCount === 0) {
-      setMessage("当前筛选结果为空，无需删除");
-      setError("");
-      return;
-    }
-    const ok = window.confirm(`确认删除当前筛选结果中的 ${targetCount} 条记录吗？此操作不可恢复。`);
-    if (!ok) return;
-
-    setDeletingId("BULK");
-    setMessage("");
-    setError("");
-    try {
-      const resp = await deleteVideosByFilter({ status, exerciseType: type });
-      const deletedCount = Number(resp?.deletedCount || 0);
-      setMessage(`批量删除完成，删除 ${deletedCount} 条`);
-      const latest = await listVideos();
-      setVideos(latest);
-    } catch (e) {
-      setError(e?.body?.error || e.message || "批量删除失败");
-    } finally {
-      setDeletingId(null);
-    }
+    if (filtered.length === 0) { setMessage("无数据可删"); return; }
+    if (!window.confirm(`确认删除 ${filtered.length} 条记录？不可恢复。`)) return;
+    setDeletingId("BULK"); setMessage(""); setError("");
+    try { const r = await deleteVideosByFilter({ status, exerciseType: type }); setMessage(`已删除 ${r?.deletedCount || 0} 条`); setVideos(await listVideos()); }
+    catch (e) { setError(e?.body?.error || e.message || "删除失败"); }
+    finally { setDeletingId(null); }
   }
 
   return (
-    <div className="card">
-      <h1>我的视频历史</h1>
-      {message && <p>{message}</p>}
+    <div>
+      <h1>视频历史</h1>
+      {message && <p style={{ color: "var(--green)" }}>{message}</p>}
       {error && <p className="error">{error}</p>}
 
-      <div className="grid2">
-        <div>
-          <label htmlFor="history-status">按状态筛选</label>
-          <select id="history-status" name="status" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="ALL">全部</option>
-            <option value="UPLOADED">UPLOADED</option>
-            <option value="PROCESSING">PROCESSING</option>
-            <option value="COMPLETED">COMPLETED</option>
-            <option value="FAILED">FAILED</option>
-            <option value="CANCELLED">CANCELLED</option>
-          </select>
+      <div className="card fade-in">
+        <div className="grid2" style={{ marginBottom: 12 }}>
+          <div>
+            <label>状态筛选</label>
+            <select value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="ALL">全部</option>
+              <option value="COMPLETED">已完成</option>
+              <option value="PROCESSING">处理中</option>
+              <option value="UPLOADED">已上传</option>
+              <option value="FAILED">失败</option>
+              <option value="CANCELLED">已取消</option>
+            </select>
+          </div>
+          <div>
+            <label>动作筛选</label>
+            <select value={type} onChange={(e) => setType(e.target.value)}>
+              <option value="ALL">全部</option>
+              {EXERCISE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
         </div>
-        <div>
-          <label htmlFor="history-type">按动作筛选</label>
-          <select id="history-type" name="exerciseType" value={type} onChange={(e) => setType(e.target.value)}>
-            <option value="ALL">全部</option>
-            {EXERCISE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
 
-      <div className="inline-actions" style={{ marginBottom: 12 }}>
-        <button type="button" className="danger-btn" disabled={deletingId === "BULK"} onClick={handleBulkDelete}>
-          {deletingId === "BULK" ? "删除中..." : "删除当前筛选结果"}
+        <button type="button" className="danger-btn" disabled={deletingId === "BULK"} onClick={handleBulkDelete} style={{ marginBottom: 12 }}>
+          {deletingId === "BULK" ? "删除中..." : "清空筛选结果"}
         </button>
-      </div>
 
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>动作</th>
-            <th>状态</th>
-            <th>评分</th>
-            <th>上传时间</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.length === 0 ? (
-            <tr>
-              <td colSpan="6">暂无符合条件的数据</td>
-            </tr>
-          ) : (
-            filtered.map((v) => (
-              <tr key={v.id}>
-                <td>{v.id}</td>
-                <td>{exerciseTypeLabel(v.exerciseType)}</td>
-                <td>
-                  <StatusPill status={v.status} />
-                </td>
-                <td>{v.trainingScore != null ? `${v.trainingScore}` : "-"}</td>
-                <td>{v.uploadedAt || "-"}</td>
-                <td>
-                  <div className="inline-actions">
-                    <Link to={`/tasks/${v.id}`}>任务</Link>
-                    <Link to={`/reports/${v.id}`}>报告</Link>
-                    <button
-                      type="button"
-                      className="danger-btn"
-                      disabled={deletingId === v.id}
-                      onClick={() => handleDelete(v.id)}
-                    >
-                      {deletingId === v.id ? "删除中..." : "删除"}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+        <table>
+          <thead><tr><th>ID</th><th>动作</th><th>状态</th><th>评分</th><th>上传时间</th><th>操作</th></tr></thead>
+          <tbody>
+            {filtered.length === 0 ? <tr><td colSpan="6" style={{ color: "var(--text-2)" }}>暂无数据</td></tr> :
+              filtered.map((v) => (
+                <tr key={v.id}>
+                  <td style={{ fontWeight: 600 }}>#{v.id}</td>
+                  <td>{exerciseTypeLabel(v.exerciseType)}</td>
+                  <td><StatusPill status={v.status} /></td>
+                  <td style={{ fontWeight: 700, color: v.trainingScore != null ? "var(--accent)" : "var(--text-2)" }}>
+                    {v.trainingScore != null ? v.trainingScore : "-"}
+                  </td>
+                  <td style={{ fontSize: 12, color: "var(--text-2)" }}>{v.uploadedAt || "-"}</td>
+                  <td>
+                    <div className="inline-actions">
+                      <Link to={`/reports/${v.id}`}>报告</Link>
+                      <Link to={`/tasks/${v.id}`}>任务</Link>
+                      <button type="button" className="danger-btn" disabled={deletingId === v.id} onClick={() => handleDelete(v.id)}>
+                        {deletingId === v.id ? "..." : "删"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

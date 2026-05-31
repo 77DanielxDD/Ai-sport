@@ -133,7 +133,7 @@ export default function ProfilePage() {
         value={deletePassword}
         onChange={(e) => setDeletePassword(e.target.value)}
       />
-      <button className="danger-btn" disabled={deleting} onClick={deleteAccount} style={{ width: "auto" }}>
+      <button className="danger-link" disabled={deleting} onClick={deleteAccount}>
         {deleting ? "注销中..." : "注销账号"}
       </button>
     </div>

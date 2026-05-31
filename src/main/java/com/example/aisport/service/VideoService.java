@@ -3,12 +3,12 @@ package com.example.aisport.service;
 import com.example.aisport.entity.ExerciseVideo;
 import com.example.aisport.entity.User;
 import com.example.aisport.repository.ExerciseVideoRepository;
+import com.example.aisport.memory.UserMemoryRefreshService;
 import com.example.aisport.service.mq.VideoAnalysisProducer;
 import com.example.aisport.task.AnalysisTask;
 import com.example.aisport.task.AnalysisTaskService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.annotation.PostConstruct;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,18 +23,9 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.Locale;
+import java.util.*;
 
 @Service
 public class VideoService {
@@ -57,27 +48,16 @@ public class VideoService {
     private final RestTemplate restTemplate;
     private final AnalysisTaskService taskService;
     private final ObjectStorageService objectStorageService;
+    private final VideoStorageService storageService;
     private final LLMInsightService llmInsightService;
     private final TrainingInsightService trainingInsightService;
+    private final UserMemoryRefreshService userMemoryRefreshService;
 
     private final ObjectMapper mapper = new ObjectMapper();
 
-    @Value("${ai.service.base-url:http://127.0.0.1:8000}")
-    private String aiBaseUrl;
-
-    @Value("${ai.python.analyze-path:/analyze}")
-    private String aiAnalyzePath;
-
-    @Value("${app.analysis.fallback-local-async-when-mq-down:true}")
-    private boolean fallbackLocalAsyncWhenMqDown;
-
-    @Value("${app.media.base-dir:./uploaded-videos/output}")
-    private String mediaBaseDir;
-
-    @Value("${video.upload.path:./uploaded-videos}")
-    private String videoUploadPath;
-
-    private Path videoStorageLocation;
+    private final String aiBaseUrl;
+    private final String aiAnalyzePath;
+    private final boolean fallbackLocalAsyncWhenMqDown;
 
     public VideoService(ExerciseVideoRepository videoRepository,
                         VideoAnalysisProducer videoAnalysisProducer,
@@ -85,26 +65,26 @@ public class VideoService {
                         RestTemplate restTemplate,
                         AnalysisTaskService taskService,
                         ObjectStorageService objectStorageService,
+                        VideoStorageService storageService,
                         TrainingInsightService trainingInsightService,
-                        Optional<LLMInsightService> llmInsightService) {
+                        Optional<LLMInsightService> llmInsightService,
+                        UserMemoryRefreshService userMemoryRefreshService,
+                        @Value("${ai.service.base-url:http://127.0.0.1:8000}") String aiBaseUrl,
+                        @Value("${ai.python.analyze-path:/analyze}") String aiAnalyzePath,
+                        @Value("${app.analysis.fallback-local-async-when-mq-down:true}") boolean fallbackLocalAsyncWhenMqDown) {
         this.videoRepository = videoRepository;
         this.videoAnalysisProducer = videoAnalysisProducer;
         this.analysisFallbackDispatcher = analysisFallbackDispatcher;
         this.restTemplate = restTemplate;
         this.taskService = taskService;
         this.objectStorageService = objectStorageService;
+        this.storageService = storageService;
         this.trainingInsightService = trainingInsightService;
         this.llmInsightService = llmInsightService.orElse(null);
-    }
-
-    @PostConstruct
-    public void initStorageLocation() {
-        this.videoStorageLocation = Paths.get(videoUploadPath).toAbsolutePath().normalize();
-        try {
-            Files.createDirectories(this.videoStorageLocation);
-        } catch (IOException e) {
-            throw new RuntimeException("Cannot create video storage directory", e);
-        }
+        this.userMemoryRefreshService = userMemoryRefreshService;
+        this.aiBaseUrl = aiBaseUrl;
+        this.aiAnalyzePath = aiAnalyzePath;
+        this.fallbackLocalAsyncWhenMqDown = fallbackLocalAsyncWhenMqDown;
     }
 
     public List<ExerciseVideo> findAll() {
@@ -141,7 +121,7 @@ public class VideoService {
 
     public ExerciseVideo saveVideo(MultipartFile file, User user, String exerciseType) throws IOException {
         String normalizedType = normalizeExerciseType(exerciseType);
-        String original = safeOriginalFilename(file.getOriginalFilename());
+        String original = storageService.safeOriginalFilename(file.getOriginalFilename());
         String fileName = System.currentTimeMillis() + "_" + original;
         String storedPath;
         if (objectStorageService.isEnabled()) {
@@ -152,10 +132,10 @@ public class VideoService {
                 objectStorageService.uploadFile(tmp, key, file.getContentType());
                 storedPath = objectStorageService.toCosUri(key);
             } finally {
-                safeDeleteFile(tmp.toString());
+                storageService.safeDeleteFile(tmp.toString());
             }
         } else {
-            Path targetLocation = this.videoStorageLocation.resolve(fileName);
+            Path targetLocation = storageService.getVideoStorageLocation().resolve(fileName);
             Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
             storedPath = targetLocation.toString();
         }
@@ -209,7 +189,7 @@ public class VideoService {
                 throw new RuntimeException("Invalid COS storedFilePath: " + video.getStoredFilePath());
             }
             try {
-                String suffix = extFromFilename(video.getOriginalFileName());
+                String suffix = storageService.extFromFilename(video.getOriginalFileName());
                 tempVideoPath = objectStorageService.downloadToTemp(key, suffix);
                 videoPath = tempVideoPath.toString();
             } catch (IOException e) {
@@ -225,7 +205,7 @@ public class VideoService {
             resp = restTemplate.postForObject(url, req, Map.class);
         } finally {
             if (tempVideoPath != null) {
-                safeDeleteFile(tempVideoPath.toString());
+                storageService.safeDeleteFile(tempVideoPath.toString());
             }
         }
 
@@ -239,7 +219,7 @@ public class VideoService {
 
         if (objectStorageService.isEnabled()) {
             try {
-                rewriteReportImagesToCos(video, resp);
+                storageService.rewriteReportImagesToCos(video, resp);
             } catch (IOException e) {
                 throw new UncheckedIOException("Upload report images to COS failed", e);
             }
@@ -294,6 +274,8 @@ public class VideoService {
             videoRepository.save(video);
 
             taskService.markCompleted(taskId);
+
+            refreshUserMemoryAsync(video);
         } catch (Exception e) {
             if (taskService.isCancelled(taskId)) {
                 video.setStatus(ExerciseVideo.VideoStatus.CANCELLED);
@@ -327,184 +309,22 @@ public class VideoService {
 
     @Transactional
     public void deleteVideoCascade(ExerciseVideo video) {
-        deleteVideoSource(video.getStoredFilePath());
+        storageService.deleteVideoSource(video.getStoredFilePath());
 
-        List<Path> reportImagePaths = resolveReportImagePaths(video.getAnalysisResult());
+        List<Path> reportImagePaths = storageService.resolveReportImagePaths(video.getAnalysisResult());
         Set<Path> parentDirs = new HashSet<>();
         for (Path path : reportImagePaths) {
-            safeDeleteFile(path.toString());
+            storageService.safeDeleteFile(path.toString());
             Path parent = path.getParent();
             if (parent != null) {
                 parentDirs.add(parent);
             }
         }
-        pruneEmptyDirs(parentDirs);
-        deleteReportImageKeys(video.getAnalysisResult());
+        storageService.pruneEmptyDirs(parentDirs);
+        storageService.deleteReportImageKeys(video.getAnalysisResult());
 
         taskService.deleteByVideoId(video.getId());
         videoRepository.delete(video);
-    }
-
-    @SuppressWarnings("unchecked")
-    private void rewriteReportImagesToCos(ExerciseVideo video, Map<String, Object> resp) throws IOException {
-        Object raw = resp.get("report_images");
-        if (!(raw instanceof List<?> list) || list.isEmpty()) {
-            return;
-        }
-        Path mediaRoot = Paths.get(mediaBaseDir).toAbsolutePath().normalize();
-        List<String> newUrls = new ArrayList<>();
-        List<String> imageKeys = new ArrayList<>();
-        for (Object item : list) {
-            if (!(item instanceof String imgUrl) || imgUrl.isBlank()) {
-                continue;
-            }
-            Path localPath = resolveMediaUrlToPath(imgUrl, mediaRoot);
-            if (localPath == null || !Files.exists(localPath)) {
-                continue;
-            }
-            String key = objectStorageService.buildReportObjectKey(video.getId(), localPath.getFileName().toString());
-            String publicUrl = objectStorageService.uploadFile(localPath, key, "image/png");
-            newUrls.add(publicUrl);
-            imageKeys.add(key);
-            safeDeleteFile(localPath.toString());
-        }
-        if (!newUrls.isEmpty()) {
-            resp.put("report_images", newUrls);
-            resp.put("report_image_keys", imageKeys);
-        }
-    }
-
-    private void deleteVideoSource(String storedFilePath) {
-        if (storedFilePath == null || storedFilePath.isBlank()) {
-            return;
-        }
-        if (objectStorageService.isEnabled()) {
-            String key = objectStorageService.keyFromStoredPath(storedFilePath);
-            if (key != null) {
-                objectStorageService.deleteObject(key);
-                return;
-            }
-        }
-        safeDeleteFile(storedFilePath);
-    }
-
-    private void deleteReportImageKeys(String analysisResult) {
-        if (!objectStorageService.isEnabled() || analysisResult == null || analysisResult.isBlank()) {
-            return;
-        }
-        try {
-            Map<String, Object> root = mapper.readValue(analysisResult, new TypeReference<>() {});
-            Object raw = root.get("report_image_keys");
-            if (!(raw instanceof List<?> keys)) {
-                return;
-            }
-            for (Object key : keys) {
-                if (key instanceof String s && !s.isBlank()) {
-                    objectStorageService.deleteObject(s);
-                }
-            }
-        } catch (Exception ignored) {
-        }
-    }
-
-    private List<Path> resolveReportImagePaths(String analysisResult) {
-        if (analysisResult == null || analysisResult.isBlank()) {
-            return List.of();
-        }
-
-        Path mediaRoot = Paths.get(mediaBaseDir).toAbsolutePath().normalize();
-        List<Path> out = new ArrayList<>();
-        try {
-            Map<String, Object> root = mapper.readValue(analysisResult, new TypeReference<>() {});
-            Object imagesObj = root.get("report_images");
-            if (!(imagesObj instanceof List<?> images)) {
-                return List.of();
-            }
-
-            for (Object raw : images) {
-                if (!(raw instanceof String url) || url.isBlank()) {
-                    continue;
-                }
-                Path resolved = resolveMediaUrlToPath(url, mediaRoot);
-                if (resolved != null) {
-                    out.add(resolved);
-                }
-            }
-        } catch (Exception ignored) {
-            return List.of();
-        }
-        return out;
-    }
-
-    private Path resolveMediaUrlToPath(String url, Path mediaRoot) {
-        String marker = "/media/";
-        int idx = url.indexOf(marker);
-        if (idx < 0) {
-            return null;
-        }
-        String relative = url.substring(idx + marker.length());
-        if (relative.isBlank()) {
-            return null;
-        }
-        Path candidate = mediaRoot.resolve(relative).normalize();
-        if (!candidate.startsWith(mediaRoot)) {
-            return null;
-        }
-        return candidate;
-    }
-
-    private void safeDeleteFile(String filePath) {
-        if (filePath == null || filePath.isBlank()) {
-            return;
-        }
-        try {
-            Files.deleteIfExists(Paths.get(filePath));
-        } catch (Exception ignored) {
-        }
-    }
-
-    private void pruneEmptyDirs(Set<Path> dirs) {
-        if (dirs.isEmpty()) {
-            return;
-        }
-        List<Path> sorted = dirs.stream()
-                .sorted(Comparator.comparingInt(Path::getNameCount).reversed())
-                .toList();
-        for (Path dir : sorted) {
-            try {
-                if (Files.exists(dir) && Files.isDirectory(dir)) {
-                    try (var stream = Files.list(dir)) {
-                        if (stream.findAny().isEmpty()) {
-                            Files.deleteIfExists(dir);
-                        }
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-        }
-    }
-
-    private String safeOriginalFilename(String originalName) {
-        if (originalName == null || originalName.isBlank()) {
-            return "video.mp4";
-        }
-        String base = Paths.get(originalName).getFileName().toString();
-        if (base.isBlank()) {
-            return "video.mp4";
-        }
-        return base.replaceAll("[\\\\/:*?\"<>|\\s]+", "_");
-    }
-
-    private String extFromFilename(String fileName) {
-        if (fileName == null || fileName.isBlank()) {
-            return ".mp4";
-        }
-        int idx = fileName.lastIndexOf('.');
-        if (idx < 0 || idx == fileName.length() - 1) {
-            return ".mp4";
-        }
-        String ext = fileName.substring(idx);
-        return ext.length() > 10 ? ".mp4" : ext;
     }
 
     private String enrichWithLLMInsight(ExerciseVideo video, String analysisJson) {
@@ -515,7 +335,7 @@ public class VideoService {
             Map<String, Object> analysis = mapper.readValue(analysisJson, new TypeReference<>() {});
             Map<String, Object> score = trainingInsightService.calculateScore(video.getExerciseType(), analysis);
 
-            Map<String, Object> llmInput = new java.util.LinkedHashMap<>();
+            Map<String, Object> llmInput = new LinkedHashMap<>();
             llmInput.put("exerciseType", video.getExerciseType());
             llmInput.put("finalScore", score.get("finalScore"));
             llmInput.put("level", score.get("level"));
@@ -523,6 +343,8 @@ public class VideoService {
             llmInput.put("repCount", score.get("repCount"));
             llmInput.put("avgMinAngle", score.get("avgMinAngle"));
             llmInput.put("targetAngle", score.get("targetAngle"));
+            llmInput.put("rhythmScore", score.get("rhythmScore"));
+            llmInput.put("symmetryScore", score.get("symmetryScore"));
             llmInput.put("tips", analysis.get("tips"));
 
             Map<String, Object> llmResult = llmInsightService.generateInsight(llmInput);
@@ -585,5 +407,16 @@ public class VideoService {
             throw new IllegalArgumentException("Unsupported exerciseType: " + raw);
         }
         return upper;
+    }
+
+    private void refreshUserMemoryAsync(ExerciseVideo video) {
+        try {
+            if (video.getUser() != null) {
+                List<ExerciseVideo> userVideos = videoRepository.findByUser(video.getUser());
+                userMemoryRefreshService.refreshUserMemory(video.getUser().getId(), userVideos);
+            }
+        } catch (Exception e) {
+            log.warn("User memory refresh failed (non-blocking): {}", e.getMessage());
+        }
     }
 }

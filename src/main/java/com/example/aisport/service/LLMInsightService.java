@@ -28,22 +28,37 @@ public class LLMInsightService {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper mapper;
-    private final String apiKey;
-    private final String baseUrl;
-    private final String model;
 
-    public LLMInsightService(
-            @Value("${app.llm.api-key:}") String apiKey,
-            @Value("${app.llm.base-url:https://api.deepseek.com}") String baseUrl,
-            @Value("${app.llm.model:deepseek-chat}") String model,
-            @Value("${app.llm.timeout-ms:15000}") int timeoutMs) {
-        this.apiKey = apiKey;
-        this.baseUrl = baseUrl;
-        this.model = model;
+    @Value("${app.llm.api-key:}")
+    private String apiKey;
+
+    @Value("${app.llm.base-url:https://api.deepseek.com}")
+    private String baseUrl;
+
+    @Value("${app.llm.model:deepseek-chat}")
+    private String model;
+
+    protected LLMInsightService() {
+        this.restTemplate = new RestTemplateBuilder()
+                .connectTimeout(Duration.ofMillis(15000))
+                .readTimeout(Duration.ofMillis(15000))
+                .build();
+        this.mapper = new ObjectMapper();
+    }
+
+    public LLMInsightService(@Value("${app.llm.timeout-ms:15000}") int timeoutMs) {
         this.restTemplate = new RestTemplateBuilder()
                 .connectTimeout(Duration.ofMillis(timeoutMs))
                 .readTimeout(Duration.ofMillis(timeoutMs))
                 .build();
+        this.mapper = new ObjectMapper();
+    }
+
+    LLMInsightService(String apiKey, String baseUrl, String model, RestTemplate restTemplate) {
+        this.apiKey = apiKey;
+        this.baseUrl = baseUrl;
+        this.model = model;
+        this.restTemplate = restTemplate;
         this.mapper = new ObjectMapper();
     }
 
@@ -78,6 +93,8 @@ public class LLMInsightService {
         int repCount = toInt(data.get("repCount"));
         double avgMinAngle = toDouble(data.get("avgMinAngle"));
         double targetAngle = toDouble(data.get("targetAngle"));
+        double rhythmScore = toDouble(data.get("rhythmScore"));
+        double symmetryScore = toDouble(data.get("symmetryScore"));
         String tipsJson = buildTipsJson(data.get("tips"));
 
         return String.format("""
@@ -85,7 +102,9 @@ public class LLMInsightService {
 
                 动作类型：%s
                 综合评分：%.1f 分（%s）
-                动作质量分：%.1f 分
+                幅度得分：%.1f 分（关节角度接近度）
+                节奏得分：%.1f 分（动作速度一致性）
+                对称性得分：%.1f 分（左右侧均衡度）
                 完成次数：%d 次
                 实际关节角度：%.1f°
                 目标关节角度：%.1f°
@@ -99,8 +118,8 @@ public class LLMInsightService {
                 }
 
                 repTipsCn 数组长度必须与逐次数据条数一致，每条结合该次的角度数据给出中文点评。
-                所有内容用中文输出。""",
-                exerciseType, finalScore, level, formScore, repCount, avgMinAngle, targetAngle, tipsJson);
+                建议需覆盖幅度、节奏、对称性三个方面。所有内容用中文输出。""",
+                exerciseType, finalScore, level, formScore, rhythmScore, symmetryScore, repCount, avgMinAngle, targetAngle, tipsJson);
     }
 
     private String buildTipsJson(Object tips) {

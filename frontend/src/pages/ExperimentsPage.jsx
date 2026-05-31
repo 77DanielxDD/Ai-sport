@@ -72,9 +72,10 @@ export default function ExperimentsPage() {
 
   return (
     <div>
-      <h1>实验评测</h1>
+      <div className="section-title"><h1>实验评测</h1></div>
+      <p className="section-subtitle">运行自动化评估，量化动作分析模型的表现</p>
       <div className="grid2">
-        <form className="card" onSubmit={startRun}>
+        <form className="card card-data" onSubmit={startRun}>
           <h3>发起评测任务</h3>
           <label htmlFor="exp-manifest">数据清单（Manifest）</label>
           <input id="exp-manifest" name="manifest" value={manifest} onChange={(e) => setManifest(e.target.value)} />
@@ -84,7 +85,7 @@ export default function ExperimentsPage() {
           <button>开始评测</button>
         </form>
 
-        <div className="card">
+        <div className="card card-data">
           <h3>查询评测结果</h3>
           <label htmlFor="exp-run-select">选择运行任务</label>
           <select id="exp-run-select" name="runId" value={selectedRun} onChange={(e) => setSelectedRun(e.target.value)}>

@@ -38,7 +38,10 @@ public class TrainingInsightService {
             consistency = clamp(100.0 - std * 3.5, 0.0, 100.0);
         }
 
-        double finalScore = repScore * 0.35 + formScore * 0.45 + consistency * 0.20;
+        double rhythmScore = extractRhythmScore(analysis.get("rhythm"));
+        double symmetryScore = extractSymmetryScore(analysis.get("symmetry"));
+
+        double finalScore = repScore * 0.15 + formScore * 0.35 + rhythmScore * 0.25 + symmetryScore * 0.15 + consistency * 0.10;
         String level = levelByScore(finalScore);
 
         Map<String, Object> out = new LinkedHashMap<>();
@@ -46,12 +49,30 @@ public class TrainingInsightService {
         out.put("level", level);
         out.put("repScore", round1(repScore));
         out.put("formScore", round1(formScore));
+        out.put("rhythmScore", round1(rhythmScore));
+        out.put("symmetryScore", round1(symmetryScore));
         out.put("consistencyScore", round1(consistency));
         out.put("repCount", repCount);
         out.put("avgMinAngle", minAngles.isEmpty() ? null : round1(avgMinAngle));
         out.put("targetAngle", round1(targetAngle));
         out.put("computedAt", LocalDateTime.now().toString());
         return out;
+    }
+
+    @SuppressWarnings("unchecked")
+    private double extractRhythmScore(Object rhythmObj) {
+        if (rhythmObj instanceof Map<?, ?> m && m.get("rhythm_score") instanceof Number n) {
+            return n.doubleValue();
+        }
+        return 50.0;
+    }
+
+    @SuppressWarnings("unchecked")
+    private double extractSymmetryScore(Object symmetryObj) {
+        if (symmetryObj instanceof Map<?, ?> m && m.get("symmetry_score") instanceof Number n) {
+            return n.doubleValue();
+        }
+        return 50.0;
     }
 
     public Map<String, Object> buildTrends(List<ExerciseVideo> videos, int days) {

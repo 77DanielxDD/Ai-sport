@@ -2,12 +2,12 @@
 import { clearToken, getRole } from "../api";
 
 const baseNavItems = [
-  { to: "/dashboard", label: "系统概览" },
-  { to: "/upload", label: "上传分析" },
-  { to: "/history", label: "视频历史" },
-  { to: "/compare", label: "报告对比" },
-  { to: "/profile", label: "个人中心" },
-  { to: "/experiments", label: "实验评测" },
+  { to: "/dashboard", label: "系统概览", icon: "◐" },
+  { to: "/upload", label: "上传分析", icon: "↑" },
+  { to: "/history", label: "视频历史", icon: "☰" },
+  { to: "/compare", label: "报告对比", icon: "⇔" },
+  { to: "/profile", label: "个人中心", icon: "●" },
+  { to: "/experiments", label: "实验评测", icon: "◇" },
 ];
 
 export default function Layout() {
@@ -40,15 +40,20 @@ export default function Layout() {
               to={item.to}
               className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
             >
-              {item.label}
+              <span className="nav-icon">{item.icon}</span>{item.label}
             </NavLink>
           ))}
         </nav>
 
         <div className="sidebar-footer">
-          <p className="user-tag">登录用户：{username}</p>
-          <p className="user-tag">角色：{roleLabel}</p>
-          <button className="ghost" onClick={logout}>
+          <div className="sidebar-user">
+            <div className="sidebar-avatar">{username.charAt(0).toUpperCase()}</div>
+            <div className="sidebar-user-info">
+              <div className="sidebar-user-name">{username}</div>
+              <div className="sidebar-user-role">{roleLabel}</div>
+            </div>
+          </div>
+          <button className="ghost" onClick={logout} style={{ marginTop: 4 }}>
             退出登录
           </button>
         </div>

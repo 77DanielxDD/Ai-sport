@@ -29,7 +29,10 @@ export default function LoginPage() {
   return (
     <div className="centered">
       <form className="card" onSubmit={submit}>
-        <h1>登录</h1>
+        <div className="brand-block" style={{ marginBottom: 16, justifyContent: "center" }}>
+          <div className="brand-mark">AS</div>
+          <h2>AI 运动分析</h2>
+        </div>
         <label htmlFor="login-username">用户名</label>
         <input
           id="login-username"
