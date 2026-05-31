@@ -82,3 +82,16 @@ jmeter/results/
 .DS_Store
 Thumbs.db
 erl_crash.dump
+
+# Claude Code
+.claude/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Matplotlib config (generated at runtime)
+**/.mplconfig/
+
+# Command templates with local paths/keys
+scripts/start_cos_command.md

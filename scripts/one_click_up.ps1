@@ -90,17 +90,17 @@ Require-NonEmpty -name "DbPassword" -value $DbPassword
 
 if ([string]::IsNullOrWhiteSpace($MediaBaseDir)) { $MediaBaseDir = Join-Path $RepoRoot "ai-service\uploaded-videos\output" }
 
-Write-Step "1) Start infrastructure (RabbitMQ + Redis)"
+Write-Step "1) Start infrastructure (MySQL + RabbitMQ + Redis)"
 $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
 if ($null -eq $dockerCmd) {
     Write-Warning "docker command not found. Skip RabbitMQ/Redis startup."
 } else {
     Push-Location $RepoRoot
     try {
-        if (-not $SkipRabbitMq -and -not $SkipRedis) { & docker compose up -d rabbitmq redis | Out-Host }
-        elseif (-not $SkipRabbitMq) { & docker compose up -d rabbitmq | Out-Host; Write-Host "SkipRedis specified." }
-        elseif (-not $SkipRedis) { & docker compose up -d redis | Out-Host; Write-Host "SkipRabbitMq specified." }
-        else { Write-Host "SkipRabbitMq and SkipRedis specified." }
+        if (-not $SkipRabbitMq -and -not $SkipRedis) { & docker compose up -d mysql rabbitmq redis | Out-Host }
+        elseif (-not $SkipRabbitMq) { & docker compose up -d mysql rabbitmq | Out-Host; Write-Host "SkipRedis specified." }
+        elseif (-not $SkipRedis) { & docker compose up -d mysql redis | Out-Host; Write-Host "SkipRabbitMq specified." }
+        else { & docker compose up -d mysql | Out-Host; Write-Host "SkipRabbitMq and SkipRedis specified." }
     } finally { Pop-Location }
 }
 
