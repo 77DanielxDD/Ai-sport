@@ -62,8 +62,10 @@ if (-not $SkipAi) {
     } else {
         $existing = Get-Process -Name "python" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -match "uvicorn" -or $_.CommandLine -match "uvicorn" }
         if ($null -eq $existing) {
+            $mediaBaseDir = Join-Path $RepoRoot "uploaded-videos\output"
+            New-Item -ItemType Directory -Force -Path $mediaBaseDir | Out-Null
             New-Item -ItemType Directory -Force -Path (Join-Path $aiDir ".mplconfig") | Out-Null
-            Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "set MPLCONFIGDIR=$aiDir\.mplconfig && python -m uvicorn app.main:app --host 127.0.0.1 --port 8000" -WorkingDirectory $aiDir -WindowStyle Minimized
+            Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "set MPLCONFIGDIR=$aiDir\.mplconfig && set AI_MEDIA_BASE_DIR=$mediaBaseDir && python -m uvicorn app.main:app --host 127.0.0.1 --port 8000" -WorkingDirectory $aiDir -WindowStyle Minimized
             Write-Host "AI service starting on :8000" -ForegroundColor Green
         } else {
             Write-Host "AI service already running." -ForegroundColor Green
@@ -73,8 +75,10 @@ if (-not $SkipAi) {
 
 # ── 4) Start Spring Boot ────────────────────────────────────────────────
 Write-Host "`n=== Starting backend ===" -ForegroundColor Cyan
+$mediaOutputDir = Join-Path $RepoRoot "uploaded-videos\output"
 $backendEnv = @(
     "set DEV_DB_PASSWORD=$DbPassword",
+    "set APP_MEDIA_BASE_DIR=$mediaOutputDir",
     "set APP_REDIS_CACHE_ENABLED=true",
     "set APP_REDIS_HOST=127.0.0.1",
     "set APP_REDIS_PORT=6379",

@@ -113,7 +113,7 @@ Write-Step "2) Start local AI service"
 $aiDir = Join-Path $RepoRoot "ai-service"
 if (-not (Test-Path $aiDir)) { throw "AI service directory not found: $aiDir" }
 New-Item -ItemType Directory -Force -Path (Join-Path $aiDir ".mplconfig") | Out-Null
-Start-ManagedProcess -Name "ai" -FilePath "cmd.exe" -ArgumentList @("/c", "set `"MPLCONFIGDIR=$aiDir\.mplconfig`" && `"$PythonExe`" -m uvicorn app.main:app --host 127.0.0.1 --port $AiPort") -WorkingDirectory $aiDir
+Start-ManagedProcess -Name "ai" -FilePath "cmd.exe" -ArgumentList @("/c", "set `"MPLCONFIGDIR=$aiDir\.mplconfig`" && set `"AI_MEDIA_BASE_DIR=$MediaBaseDir`" && `"$PythonExe`" -m uvicorn app.main:app --host 127.0.0.1 --port $AiPort") -WorkingDirectory $aiDir
 Wait-Http -Name "AI" -Url "http://127.0.0.1:$AiPort/health" -TimeoutSec 60 | Out-Null
 
 Write-Step "3) Start Spring Boot (COS + Redis cache enabled)"
