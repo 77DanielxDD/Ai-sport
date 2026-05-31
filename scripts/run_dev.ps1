@@ -43,7 +43,10 @@ $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
 if ($null -ne $dockerCmd) {
     Push-Location $RepoRoot
     try {
-        & docker compose up -d redis rabbitmq 2>&1 | Out-Host
+        $prev = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        & docker compose up -d redis rabbitmq --remove-orphans 2>&1 | Out-Host
+        $ErrorActionPreference = $prev
         Write-Host "Docker services started." -ForegroundColor Green
     } finally { Pop-Location }
 } else {
