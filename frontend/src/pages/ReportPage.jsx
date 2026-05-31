@@ -47,14 +47,19 @@ export default function ReportPage() {
   const analysis = useMemo(() => data?.analysis || {}, [data]);
   const reportImages = analysis.report_images || [];
   const tips = analysis.tips || [];
+  const repEvaluations = analysis.repEvaluations || [];
+  const hasRichEvals = repEvaluations.length > 0;
   const suggestions = analysis.suggestions || [];
   const overallFeedback = analysis.overall_feedback || "";
   const score = analysis.score_breakdown || analysis.trainingScore || null;
   const linePoints = useMemo(() => {
-    return tips.filter((t) => typeof t.rep_index !== "undefined" && typeof t.min_angle !== "undefined")
-      .map((t) => ({ x: Number(t.rep_index), y: Number(t.min_angle) }))
-      .filter((p) => !Number.isNaN(p.x) && !Number.isNaN(p.y)).sort((a, b) => a.x - b.x);
-  }, [tips]);
+    const source = hasRichEvals ? repEvaluations : tips;
+    return source.filter((t) => typeof t.repIndex !== "undefined" || typeof t.rep_index !== "undefined")
+      .map((t) => ({ x: Number(t.repIndex ?? t.rep_index), y: Number(t.min_angle ?? 0) }))
+      .filter((p) => !Number.isNaN(p.x)).sort((a, b) => a.x - b.x);
+  }, [repEvaluations, tips, hasRichEvals]);
+
+  const [activeRepIdx, setActiveRepIdx] = useState(null);
 
   const resolveImageUrl = (url) => {
     if (!url) return "";
@@ -70,6 +75,56 @@ export default function ReportPage() {
   function PriorityBadge({ priority }) {
     const colors = { high: "var(--red)", medium: "#e6a817", low: "var(--green)" };
     return <span style={{ fontSize: 11, color: "#fff", background: colors[priority] || "#888", borderRadius: 10, padding: "1px 8px", marginLeft: 8 }}>{priority}</span>;
+  }
+
+  const thStyle = { padding: "4px 6px", textAlign: "left", fontWeight: 600, fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap" };
+  const tdStyle = { padding: "4px 6px", borderBottom: "1px solid var(--border-color, #f0f0f0)", fontSize: 12, verticalAlign: "middle" };
+
+  function levelColor(level) {
+    return level === "优秀" ? "var(--green)" : level === "良好" ? "var(--accent)" : level === "一般" ? "#e6a817" : "var(--red)";
+  }
+  function tempoColor(level) {
+    return level === "normal" ? "var(--green)" : level === "fast" ? "#e6a817" : level === "slow" ? "var(--blue)" : "var(--text-2)";
+  }
+  function tempoLabel(level) {
+    return level === "normal" ? "正常" : level === "fast" ? "偏快" : level === "slow" ? "偏慢" : "";
+  }
+  function symColor(level) {
+    return level === "good" ? "var(--green)" : level === "warning" ? "#e6a817" : "var(--red)";
+  }
+  function symLabel(level) {
+    return level === "good" ? "良好" : level === "warning" ? "偏差" : level === "bad" ? "不足" : "";
+  }
+
+  function MetricCell({ score, level }) {
+    if (score == null) return <span>-</span>;
+    const colors = { good: "var(--green)", warning: "#e6a817", bad: "var(--red)" };
+    return (
+      <span style={{ color: colors[level] || "var(--text)" }}>
+        {score} <span style={{ fontSize: 10 }}>{level === "good" ? "✓" : level === "warning" ? "△" : "✗"}</span>
+      </span>
+    );
+  }
+
+  function RepDetailCard({ ev, idx, images, resolveUrl }) {
+    return (
+      <div style={{ marginTop: 8, padding: "8px 10px", background: "var(--bg)", borderRadius: "var(--radius-sm)", fontSize: 12 }}>
+        <div style={{ fontWeight: 600, marginBottom: 6 }}>第 {ev.repIndex} 次 · {ev.score} 分 · {ev.level}</div>
+        {ev.evidence && ev.evidence.length > 0 && (
+          <div style={{ marginBottom: 4 }}>
+            {ev.evidence.map((e, i) => <span key={i} style={{ marginRight: 12, color: "var(--text-2)" }}>• {e}</span>)}
+          </div>
+        )}
+        <div style={{ color: ev.level === "优秀" || ev.level === "良好" ? "var(--green)" : "var(--red)", marginBottom: 4 }}>
+          {ev.diagnosis}
+        </div>
+        <div style={{ fontWeight: 500 }}>建议：{ev.suggestion || ev.tip}</div>
+        {images && images[idx] && (
+          <img src={resolveUrl(images[idx])} alt={`rep ${ev.repIndex}`} loading="lazy"
+            style={{ marginTop: 6, maxWidth: "100%", maxHeight: 200, borderRadius: 6, border: "1px solid var(--border-color, #e0e0e0)" }} />
+        )}
+      </div>
+    );
   }
 
   return (
@@ -121,14 +176,75 @@ export default function ReportPage() {
             </div>
             <div className="card fade-in fade-in-2">
               <h3>逐次数据</h3>
-              {tips.length === 0 ? <p style={{ color: "var(--text-2)" }}>暂无数据</p> : (
-                <ul style={{ paddingLeft: 18, maxHeight: 240, overflowY: "auto" }}>
-                  {tips.map((t, idx) => (
-                    <li key={idx} style={{ marginBottom: 6, fontSize: 13 }}>
-                      第 {t.rep_index} 次 · {t.min_angle}° · {t.tip}
-                    </li>
-                  ))}
-                </ul>
+              {!hasRichEvals && tips.length === 0 ? <p style={{ color: "var(--text-2)" }}>暂无数据</p> : (
+                hasRichEvals ? (
+                  <div className="rep-evals-table" style={{ maxHeight: 360, overflowY: "auto" }}>
+                    <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid var(--border-color, #e0e0e0)" }}>
+                          <th style={thStyle}>#</th>
+                          <th style={thStyle}>综合</th>
+                          <th style={thStyle}>幅度</th>
+                          <th style={thStyle}>节奏</th>
+                          <th style={thStyle}>稳定性</th>
+                          <th style={thStyle}>对称性</th>
+                          <th style={thStyle}>建议</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {repEvaluations.map((ev, i) => (
+                          <tr
+                            key={i}
+                            onClick={() => setActiveRepIdx(activeRepIdx === i ? null : i)}
+                            style={{
+                              cursor: "pointer",
+                              background: activeRepIdx === i ? "var(--accent-bg, #e8f4fd)" : "transparent",
+                              transition: "background 0.15s",
+                            }}
+                          >
+                            <td style={tdStyle}>{ev.repIndex}</td>
+                            <td style={tdStyle}>
+                              <span style={{ fontWeight: 700, color: levelColor(ev.level) }}>{ev.score}</span>
+                              <span style={{ fontSize: 10, color: "var(--text-2)", marginLeft: 4 }}>{ev.level}</span>
+                            </td>
+                            <td style={tdStyle}>
+                              <MetricCell score={ev.depthScore} level={ev.depthLevel} />
+                            </td>
+                            <td style={tdStyle}>
+                              {ev.tempoLevel !== "unknown" ? (
+                                <span style={{ color: tempoColor(ev.tempoLevel) }}>
+                                  {ev.tempoMs > 0 ? `${(ev.tempoMs / 1000).toFixed(1)}s` : "-"} {tempoLabel(ev.tempoLevel)}
+                                </span>
+                              ) : "-"}
+                            </td>
+                            <td style={tdStyle}>{ev.stabilityScore != null ? `${ev.stabilityScore}` : "-"}</td>
+                            <td style={tdStyle}>
+                              {ev.symmetryDiffDeg != null ? (
+                                <span style={{ color: symColor(ev.symmetryLevel) }}>
+                                  {ev.symmetryDiffDeg}° {symLabel(ev.symmetryLevel)}
+                                </span>
+                              ) : "-"}
+                            </td>
+                            <td style={{ ...tdStyle, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ev.suggestion}>
+                              {ev.suggestion || ev.tip || "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {activeRepIdx != null && repEvaluations[activeRepIdx] && (
+                      <RepDetailCard ev={repEvaluations[activeRepIdx]} idx={activeRepIdx} images={reportImages} resolveUrl={resolveImageUrl} />
+                    )}
+                  </div>
+                ) : (
+                  <ul style={{ paddingLeft: 18, maxHeight: 240, overflowY: "auto" }}>
+                    {tips.map((t, idx) => (
+                      <li key={idx} style={{ marginBottom: 6, fontSize: 13 }}>
+                        第 {t.rep_index} 次 · {t.min_angle}° · {t.tip}
+                      </li>
+                    ))}
+                  </ul>
+                )
               )}
             </div>
           </div>

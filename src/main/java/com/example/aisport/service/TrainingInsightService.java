@@ -20,6 +20,125 @@ public class TrainingInsightService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> buildRepEvaluations(String exerciseType, Map<String, Object> analysis) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        Object raw = analysis.get("rep_events");
+        if (!(raw instanceof List<?> repEventsList)) {
+            raw = analysis.get("tips");
+        }
+        if (!(raw instanceof List<?> sourceList) || sourceList.isEmpty()) {
+            return out;
+        }
+
+        String et = exerciseType != null ? exerciseType.trim().toUpperCase(Locale.ROOT) : "";
+        double targetAngle = targetAngleByExercise(et);
+        boolean hasNewFields = false;
+        if (!sourceList.isEmpty() && sourceList.get(0) instanceof Map<?, ?> first) {
+            hasNewFields = first.containsKey("depth_level") || first.containsKey("depth_score");
+        }
+
+        for (Object item : sourceList) {
+            if (!(item instanceof Map<?, ?> eventMap)) {
+                continue;
+            }
+            Map<String, Object> eval = new LinkedHashMap<>();
+            int repIndex = parseIntOrDefault(eventMap.get("rep_index"), 0);
+            eval.put("repIndex", repIndex);
+
+            if (hasNewFields) {
+                eval.put("depthScore", parseDoubleOrNull(eventMap.get("depth_score")));
+                eval.put("depthLevel", safeGet(eventMap, "depth_level", "normal"));
+                eval.put("tempoMs", parseIntOrDefault(eventMap.get("tempo_ms"), -1));
+                eval.put("tempoLevel", safeGet(eventMap, "tempo_level", "unknown"));
+                eval.put("stabilityScore", parseDoubleOrNull(eventMap.get("stability_score")));
+                eval.put("symmetryDiffDeg", parseDoubleOrNull(eventMap.get("symmetry_diff_deg")));
+                eval.put("symmetryLevel", safeGet(eventMap, "symmetry_level", "normal"));
+                eval.put("evidence", safeGetOrEmpty(eventMap, "evidence"));
+            } else {
+                double angle = parseDoubleOrDefault(eventMap.get("min_angle"), 90.0);
+                double depthScore = clamp(100.0 - Math.abs(angle - targetAngle) * 1.5, 0.0, 100.0);
+                String depthLevel = depthScore >= 75.0 ? "good" : depthScore >= 50.0 ? "warning" : "bad";
+                eval.put("depthScore", round1(depthScore));
+                eval.put("depthLevel", depthLevel);
+                eval.put("tempoMs", -1);
+                eval.put("tempoLevel", "unknown");
+                eval.put("stabilityScore", 50.0);
+                eval.put("symmetryDiffDeg", null);
+                eval.put("symmetryLevel", "unknown");
+                eval.put("evidence", List.of("最低角度 " + round1(angle) + "°"));
+            }
+
+            String tip = eventMap.get("tip") instanceof String s ? s : "";
+            eval.put("tip", tip);
+
+            // composite score
+            double depthS = eval.get("depthScore") instanceof Number n ? n.doubleValue() : 50.0;
+            double stabilityS = eval.get("stabilityScore") instanceof Number n ? n.doubleValue() : 50.0;
+            double symS;
+            Object symDiff = eval.get("symmetryDiffDeg");
+            if (symDiff instanceof Number n) {
+                symS = clamp(100.0 - n.doubleValue() * 4.0, 0.0, 100.0);
+            } else {
+                symS = 50.0;
+            }
+            double composite = depthS * 0.45 + stabilityS * 0.20 + symS * 0.20;
+            // tempo bonus from level
+            String tempoLevel = eval.get("tempoLevel") instanceof String s ? s : "normal";
+            composite += "normal".equals(tempoLevel) ? 10.0 : "unknown".equals(tempoLevel) ? 5.0 : 3.0;
+            composite = clamp(composite, 0.0, 100.0);
+
+            eval.put("score", round1(composite));
+            eval.put("level", levelByScore(composite));
+
+            eval.put("diagnosis", buildDiagnosis(eval, hasNewFields));
+            eval.put("suggestion", buildSuggestion(eval, et, hasNewFields));
+
+            out.add(eval);
+        }
+        return out;
+    }
+
+    private String buildDiagnosis(Map<String, Object> eval, boolean hasNewFields) {
+        StringBuilder sb = new StringBuilder();
+        String depthLevel = eval.get("depthLevel") instanceof String s ? s : "normal";
+        String tempoLevel = eval.get("tempoLevel") instanceof String s ? s : "normal";
+        switch (depthLevel) {
+            case "good" -> sb.append("幅度良好");
+            case "warning" -> sb.append("幅度一般");
+            case "bad" -> sb.append("幅度不足");
+            default -> sb.append("幅度正常");
+        }
+        if (hasNewFields && !"unknown".equals(tempoLevel)) {
+            sb.append("，");
+            switch (tempoLevel) {
+                case "fast" -> sb.append("节奏偏快");
+                case "slow" -> sb.append("节奏偏慢");
+                case "normal" -> sb.append("节奏稳定");
+            }
+        }
+        return sb.toString();
+    }
+
+    private String buildSuggestion(Map<String, Object> eval, String exerciseType, boolean hasNewFields) {
+        String depthLevel = eval.get("depthLevel") instanceof String s ? s : "normal";
+        String tempoLevel = eval.get("tempoLevel") instanceof String s ? s : "normal";
+        if (!hasNewFields) {
+            return switch (depthLevel) {
+                case "bad" -> "增加动作幅度，控制离心阶段";
+                case "warning" -> "适当增加幅度，保持稳定";
+                default -> "保持当前动作质量";
+            };
+        }
+        List<String> parts = new ArrayList<>();
+        if ("bad".equals(depthLevel)) parts.add("增加动作幅度");
+        else if ("warning".equals(depthLevel)) parts.add("适当增加幅度");
+        if ("fast".equals(tempoLevel)) parts.add("控制下放速度");
+        else if ("slow".equals(tempoLevel)) parts.add("加快动作节奏");
+        if (parts.isEmpty()) parts.add("保持当前质量");
+        return String.join("，", parts);
+    }
+
     public Map<String, Object> calculateScore(String exerciseType, Map<String, Object> analysis) {
         int repCount = parseIntOrDefault(analysis.get("rep_count"), parseIntOrDefault(analysis.get("repCount"), 0));
         List<Double> minAngles = extractMinAngles(analysis.get("tips"));
@@ -226,8 +345,28 @@ public class TrainingInsightService {
         }
     }
 
+    private Double parseDoubleOrNull(Object val) {
+        if (val == null) return null;
+        try {
+            return Double.parseDouble(String.valueOf(val));
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
     private double parseDoubleOrDefaultObj(Object val) {
         return parseDoubleOrDefault(val, 0.0);
+    }
+
+    private String safeGet(Map<?, ?> map, String key, String defaultValue) {
+        Object val = map.get(key);
+        return val instanceof String s ? s : defaultValue;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> safeGetOrEmpty(Map<?, ?> map, String key) {
+        Object val = map.get(key);
+        return val instanceof List<?> list ? (List<String>) list : List.of();
     }
 
     private double clamp(double val, double min, double max) {

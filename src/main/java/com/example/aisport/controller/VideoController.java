@@ -104,6 +104,7 @@ public class VideoController {
         ObjectMapper mapper = new ObjectMapper();
         Map<String, Object> analysisMap = mapper.readValue(videoService.getAnalysisResult(id), new TypeReference<>() {});
         analysisMap.put("trainingScore", trainingInsightService.calculateScore(video.getExerciseType(), analysisMap));
+        analysisMap.put("repEvaluations", trainingInsightService.buildRepEvaluations(video.getExerciseType(), analysisMap));
 
         Map<String, Object> response = new HashMap<>();
         response.put("videoId", id);

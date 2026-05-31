@@ -278,6 +278,7 @@ def process_video(
     rep_events: List[Dict[str, object]] = []
 
     events = sorted(events, key=lambda x: int(x["frame_idx"]))
+    per_event_symmetry = compute_per_event_symmetry(events, event_landmarks_dict, rule)
     for i, event in enumerate(events, start=1):
         angle = float(event["angle"])
         tip = build_tip_text(rule, angle)
@@ -286,16 +287,36 @@ def process_video(
         rendered = render_keyframe(event["frame"], event["points"], i, angle, tip)
         cv2.imwrite(str(img_path), rendered)
 
+        depth_score_val, depth_level = compute_depth_metric(angle, rule)
+        tempo_ms, tempo_level = compute_tempo_metric(events, i - 1, fps)
+        symmetry_diff = per_event_symmetry[i - 1]["diff_deg"] if i - 1 < len(per_event_symmetry) else 0.0
+        symmetry_score_val, symmetry_level = compute_symmetry_metric(symmetry_diff)
+        stability_score_val = compute_stability_metric(history, int(event["frame_idx"]), angle)
+
+        evidence: List[str] = [
+            f"最低角度 {angle:.1f}°",
+            f"与目标角度 {rule.good_angle:.0f}° 相差 {abs(angle - rule.good_angle):.1f}°",
+        ]
+        if symmetry_diff > 0:
+            evidence.append(f"左右角度差 {symmetry_diff:.1f}°")
+
+        rep_event: Dict[str, object] = {
+            "rep_index": i,
+            "keyframe_frame": int(event["frame_idx"]),
+            "min_angle": round(angle, 2),
+            "depth_level": depth_level,
+            "depth_score": round(depth_score_val, 1),
+            "tempo_ms": tempo_ms,
+            "tempo_level": tempo_level,
+            "stability_score": round(stability_score_val, 1),
+            "symmetry_diff_deg": round(symmetry_diff, 1),
+            "symmetry_level": symmetry_level,
+            "tip": tip,
+            "evidence": evidence,
+        }
         report_images.append(f"/media/{video_id}/{img_name}")
         tips.append({"rep_index": i, "min_angle": round(angle, 2), "tip": tip})
-        rep_events.append(
-            {
-                "rep_index": i,
-                "keyframe_frame": int(event["frame_idx"]),
-                "min_angle": round(angle, 2),
-                "tip": tip,
-            }
-        )
+        rep_events.append(rep_event)
 
     rhythm = compute_rhythm(events, fps)
     symmetry = compute_symmetry(events, event_landmarks_dict, rule)
@@ -434,6 +455,78 @@ def build_tip_text(rule: ExerciseRule, angle: float) -> str:
     if angle <= rule.warn_angle:
         return rule.warn_tip
     return rule.bad_tip
+
+
+def compute_depth_metric(angle: float, rule: ExerciseRule) -> Tuple[float, str]:
+    diff = angle - rule.good_angle
+    if diff <= 0:
+        score = min(100.0, 100.0 - abs(diff) * 0.5)
+        level = "good"
+    elif diff <= (rule.warn_angle - rule.good_angle):
+        ratio = diff / (rule.warn_angle - rule.good_angle)
+        score = max(50.0, 100.0 - ratio * 50.0)
+        level = "warning"
+    else:
+        score = max(0.0, 50.0 - diff * 0.4)
+        level = "bad"
+    return round(score, 1), level
+
+
+def compute_tempo_metric(events: List[Dict[str, object]], idx: int, fps: float) -> Tuple[int, str]:
+    if idx == 0 or len(events) < 2:
+        return 0, "unknown"
+    prev = events[idx - 1]
+    curr = events[idx]
+    gap_frames = int(curr["frame_idx"]) - int(prev["frame_idx"])
+    if gap_frames <= 0:
+        return 0, "unknown"
+    tempo_ms = int(gap_frames / max(fps, 1.0) * 1000)
+    if 800 <= tempo_ms <= 2200:
+        level = "normal"
+    elif tempo_ms < 800:
+        level = "fast"
+    else:
+        level = "slow"
+    return tempo_ms, level
+
+
+def compute_stability_metric(history: List[Dict[str, object]], frame_idx: int, event_angle: float) -> float:
+    nearby = [float(h["angle"]) for h in history if abs(int(h["frame_idx"]) - frame_idx) <= 15]
+    if len(nearby) < 3:
+        return 50.0
+    mean = sum(nearby) / len(nearby)
+    variance = sum((a - mean) ** 2 for a in nearby) / len(nearby)
+    std = math.sqrt(variance)
+    score = max(0.0, min(100.0, 100.0 - std * 4.0))
+    return round(score, 1)
+
+
+def compute_symmetry_metric(diff_deg: float) -> Tuple[float, str]:
+    if diff_deg < 3.0:
+        return min(100.0, 100.0 - diff_deg * 3.0), "good"
+    if diff_deg < 8.0:
+        return max(50.0, 100.0 - diff_deg * 5.0), "warning"
+    return max(0.0, 100.0 - diff_deg * 4.0), "bad"
+
+
+def compute_per_event_symmetry(events: List[Dict[str, object]], event_landmarks_dict: Dict[int, object], rule: ExerciseRule) -> List[Dict[str, object]]:
+    out: List[Dict[str, object]] = []
+    left_trip = tuple(NAME_TO_SIDES[name][0] for name in rule.landmarks)
+    right_trip = tuple(NAME_TO_SIDES[name][1] for name in rule.landmarks)
+    events_sorted = sorted(events, key=lambda e: int(e["frame_idx"]))
+    for event in events_sorted:
+        frame_idx = int(event["frame_idx"])
+        landmarks = event_landmarks_dict.get(frame_idx)
+        if landmarks is None:
+            out.append({"diff_deg": 0.0})
+            continue
+        left_angle = calc_angle_for_side(landmarks.landmark, left_trip, None)
+        right_angle = calc_angle_for_side(landmarks.landmark, right_trip, None)
+        if left_angle is not None and right_angle is not None:
+            out.append({"diff_deg": round(abs(left_angle - right_angle), 1)})
+        else:
+            out.append({"diff_deg": 0.0})
+    return out
 
 
 def compute_rhythm(events: List[Dict[str, object]], fps: float) -> Dict[str, object]:
