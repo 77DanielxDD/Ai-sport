@@ -95,3 +95,6 @@ __pycache__/
 
 # Command templates with local paths/keys
 scripts/start_cos_command.md
+
+# Claude Code plugin docs
+docs/superpowers/
