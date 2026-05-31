@@ -74,4 +74,4 @@ if ($StopRabbitMq) {
 
 Write-Step "Done"
 Write-Host "You can restart everything with:"
-Write-Host "  powershell -ExecutionPolicy Bypass -File scripts/dev_up.ps1"
+Write-Host "  powershell -ExecutionPolicy Bypass -File scripts/run_dev.ps1"

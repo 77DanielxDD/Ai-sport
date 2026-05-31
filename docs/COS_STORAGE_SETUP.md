@@ -71,12 +71,10 @@ So keep:
 
 ## 5. One-command startup
 
-Use the wrapper script (it injects both Java and Python COS env vars, then starts all services):
+Set COS credentials via environment variables, then run the dev script:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/dev_up_cos.ps1 `
-  -CosBucket "your-bucket-125xxxxxxx" `
-  -CosSecretId "AKIDxxxxxxxx" `
-  -CosSecretKey "xxxxxxxx" `
-  -CosPublicBaseUrl "https://your-bucket-125xxxxxxx.cos.ap-guangzhou.myqcloud.com"
+$env:DEV_OBJECT_STORAGE_ACCESS_KEY = "AKIDxxxxxxxx"
+$env:DEV_OBJECT_STORAGE_SECRET_KEY = "xxxxxxxx"
+powershell -ExecutionPolicy Bypass -File scripts/run_dev.ps1
 ```
