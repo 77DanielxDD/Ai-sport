@@ -7,7 +7,6 @@ import UploadPage from "./pages/UploadPage";
 import HistoryPage from "./pages/HistoryPage";
 import TaskPage from "./pages/TaskPage";
 import ReportPage from "./pages/ReportPage";
-import ExperimentsPage from "./pages/ExperimentsPage";
 import AdminPage from "./pages/AdminPage";
 import ProfilePage from "./pages/ProfilePage";
 import ComparePage from "./pages/ComparePage";
@@ -42,7 +41,6 @@ export default function App() {
         <Route path="profile" element={<ProfilePage />} />
         <Route path="tasks/:videoId" element={<TaskPage />} />
         <Route path="reports/:videoId" element={<ReportPage />} />
-        <Route path="experiments" element={<ExperimentsPage />} />
         <Route path="admin" element={<AdminPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

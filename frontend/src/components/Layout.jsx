@@ -7,7 +7,6 @@ const baseNavItems = [
   { to: "/history", label: "视频历史", icon: "☰" },
   { to: "/compare", label: "报告对比", icon: "⇔" },
   { to: "/profile", label: "个人中心", icon: "●" },
-  { to: "/experiments", label: "实验评测", icon: "◇" },
 ];
 
 export default function Layout() {

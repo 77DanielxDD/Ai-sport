@@ -1,2 +1,0 @@
-video_id,video_path,annotation_path,prediction_path
-example_pushup_001,evaluation/action_analysis/dataset/videos/pushup/standard/example_pushup_001.mp4,evaluation/action_analysis/dataset/annotations/example_pushup_001.json,evaluation/action_analysis/dataset/predictions/example_pushup_001_pred.json

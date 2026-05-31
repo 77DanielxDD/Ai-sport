@@ -1,2 +1,0 @@
-video_id,annotation_path,prediction_path,has_prediction,action_gt,action_pred,action_correct,pck,pck_correct,pck_total,angle_mae_deg,angle_pairs,error_type_labels,status,message
-example_pushup_001,evaluation\action_analysis\dataset\annotations\example_pushup_001.json,evaluation\action_analysis\dataset\predictions\example_pushup_001_pred.json,True,PUSHUP,PUSHUP,1,1.000000,6,6,2.450000,2,shallow_depth,OK,

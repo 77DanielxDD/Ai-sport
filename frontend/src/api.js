@@ -163,25 +163,6 @@ export function listVideoTasks(videoId) {
   });
 }
 
-export function runExperiment(manifest, outputDir) {
-  return request("/api/experiments/run", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ manifest, outputDir }),
-  });
-}
-
-export function listExperiments() {
-  return request("/api/experiments");
-}
-
-export function getExperiment(runId) {
-  return request(`/api/experiments/${runId}`);
-}
-
-export function getExperimentSummary(runId) {
-  return request(`/api/experiments/${runId}/summary`);
-}
 
 export function systemHealth() {
   return request("/api/system/health");
