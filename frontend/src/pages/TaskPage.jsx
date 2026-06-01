@@ -14,13 +14,13 @@ function formatMs(ms) {
 }
 
 function stageIndex(status, hasAnalysis) {
-  if (hasAnalysis) return 5; // 完成
+  if (hasAnalysis) return 5;
   switch (status) {
     case "UPLOADED": return 0;
     case "PROCESSING": return 2;
     case "COMPLETED": return 5;
-    case "FAILED": return -1;
-    case "CANCELLED": return -1;
+    case "FAILED": return 3;
+    case "CANCELLED": return 2;
     default: return 0;
   }
 }
@@ -140,9 +140,9 @@ export default function TaskPage() {
         <div className="stage-progress">
           {STAGES.map((label, i) => {
             let cls = "stage-item";
-            if (currentStage >= 0 && i < currentStage) cls += " done";
-            else if (i === currentStage) cls += " current";
-            if (failed && i === currentStage) cls = "stage-item failed";
+            if (i < currentStage) cls += " done";
+            else if (i === currentStage) cls += failed ? " failed" : cancelled ? "" : " current";
+            if (failed && i < currentStage) cls += " done";
             return (
               <div key={i} className={cls}>
                 <span className="stage-label-sm">{i + 1}</span>

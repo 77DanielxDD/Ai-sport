@@ -75,8 +75,15 @@ export default function ReportPage() {
   }, [videoId]);
 
   useEffect(() => {
-    if (modalImage) document.body.style.overflow = "hidden";
-    else document.body.style.overflow = "";
+    if (!modalImage) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => { if (e.key === "Escape") setModalImage(null); };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      document.removeEventListener("keydown", onKey);
+    };
   }, [modalImage]);
 
   const analysis = useMemo(() => data?.analysis || {}, [data]);
@@ -92,11 +99,10 @@ export default function ReportPage() {
   const processMs = analysis.processing_time_ms ?? "-";
 
   const linePoints = useMemo(() => {
-    const source = hasRichEvals ? repEvaluations : tips;
-    return source.filter((t) => typeof t.repIndex !== "undefined" || typeof t.rep_index !== "undefined")
-      .map((t) => ({ x: Number(t.repIndex ?? t.rep_index), y: Number(t.min_angle ?? 0) }))
+    return tips.filter((t) => typeof t.rep_index !== "undefined")
+      .map((t) => ({ x: Number(t.rep_index), y: Number(t.min_angle ?? 0) }))
       .filter((p) => !Number.isNaN(p.x)).sort((a, b) => a.x - b.x);
-  }, [repEvaluations, tips, hasRichEvals]);
+  }, [tips]);
 
   const resolveUrl = (url) => {
     if (!url) return "";

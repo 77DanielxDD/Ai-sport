@@ -34,6 +34,10 @@ export default function UploadPage() {
   const onFileChange = useCallback(async (f) => {
     setFile(f); setDurationSec(null); setError("");
     if (!f) return;
+    const isVideo = f.type.startsWith("video/") || /\.(mp4|avi|mov|webm|mkv)$/i.test(f.name);
+    if (!isVideo) {
+      setFile(null); setError("请选择视频文件（MP4、AVI、MOV 等）"); return;
+    }
     try { setDurationSec(await getVideoDuration(f)); } catch { setDurationSec(null); }
   }, []);
 
@@ -106,7 +110,7 @@ export default function UploadPage() {
                 <p style={{ fontSize: 12, color: "var(--text-2)" }}>支持 MP4、AVI、MOV</p>
               </>
             ) : (
-              <div className="file-preview">
+              <div className="file-preview" onClick={(e) => e.stopPropagation()}>
                 <div className="file-preview-meta">
                   <div className="file-preview-name" title={file.name}>{file.name}</div>
                   <div className="file-preview-stats">
