@@ -2,13 +2,13 @@ import { useState } from "react";
 import { askAgent } from "../api";
 
 function SeverityBadge({ severity }) {
-  const colors = { high: "var(--red)", medium: "#e6a817", low: "var(--green)" };
-  return <span style={{ fontSize: 11, color: "#fff", background: colors[severity] || "#888", borderRadius: 10, padding: "1px 8px", marginLeft: 8 }}>{severity}</span>;
+  const colors = { high: "var(--red)", medium: "var(--amber)", low: "var(--green)" };
+  return <span style={{ fontSize: 11, color: "#fff", background: colors[severity] || "var(--text-3)", borderRadius: 10, padding: "1px 8px", marginLeft: 8 }}>{severity}</span>;
 }
 
 function PriorityBadge({ priority }) {
-  const colors = { high: "var(--red)", medium: "#e6a817", low: "var(--green)" };
-  return <span style={{ fontSize: 11, color: "#fff", background: colors[priority] || "#888", borderRadius: 10, padding: "1px 8px", marginLeft: 8 }}>{priority}</span>;
+  const colors = { high: "var(--red)", medium: "var(--amber)", low: "var(--green)" };
+  return <span style={{ fontSize: 11, color: "#fff", background: colors[priority] || "var(--text-3)", borderRadius: 10, padding: "1px 8px", marginLeft: 8 }}>{priority}</span>;
 }
 
 export default function QaPage() {

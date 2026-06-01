@@ -119,7 +119,7 @@ export default function ProfilePage() {
         <button disabled={loading}>{loading ? "保存中..." : "保存修改"}</button>
       </form>
 
-      <hr style={{ margin: "20px 0", border: "none", borderTop: "1px solid #dbe3ef" }} />
+      <hr style={{ margin: "20px 0", border: "none", borderTop: "1px solid var(--border)" }} />
       <h3>注销账号</h3>
       <p className="error" style={{ fontWeight: 500 }}>
         注销后将永久删除你的账号、视频、任务和报告数据，且无法恢复。

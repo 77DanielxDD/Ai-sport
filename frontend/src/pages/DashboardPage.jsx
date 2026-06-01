@@ -23,14 +23,14 @@ function ScoreRing({ score, size = 120, stroke = 8 }) {
         />
         <defs>
           <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#FF6B6B" />
-            <stop offset="100%" stopColor="#FF9F7C" />
+            <stop offset="0%" stopColor="#059669" />
+            <stop offset="100%" stopColor="#047857" />
           </linearGradient>
         </defs>
       </svg>
       <div className="value">
-        <span style={{ fontSize: size * 0.26 }}>{score ?? "-"}</span>
-        <span className="label">综合评分</span>
+        <span style={{ fontSize: size * 0.26, color: "var(--accent)", fontFamily: "var(--font-mono)", fontWeight: 800 }}>{score ?? "-"}</span>
+        <span style={{ fontSize: 10, color: "var(--text-2)", fontFamily: "var(--font-sans)", fontWeight: 500 }}>综合评分</span>
       </div>
     </div>
   );
@@ -59,17 +59,21 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1>训练概览</h1>
-      {me && <p style={{ color: "var(--text-2)" }}>欢迎回来，<b style={{ color: "var(--text)" }}>{me.username}</b></p>}
+      <div className="section-title">
+        <h1>训练概览</h1>
+        {me && <span style={{ color: "var(--text-2)", fontSize: 13, fontWeight: 400, marginLeft: 8 }}>欢迎回来，<b style={{ color: "var(--text)", fontWeight: 600 }}>{me.username}</b></span>}
+      </div>
       {error && <p className="error">{error}</p>}
 
       <div className="grid2 fade-in">
         <div className="card" style={{ textAlign: "center" }}>
           <h3>综合评分</h3>
           <ScoreRing score={overallScore} size={140} />
-          <p style={{ color: "var(--text-2)", fontSize: 13, marginTop: 8 }}>
-            {trends?.completedSessions ?? 0} 次训练 · 近30天
-          </p>
+          {trends && (
+            <p style={{ color: "var(--text-2)", fontSize: 13, marginTop: 10, fontFamily: "var(--font-mono)" }}>
+              {trends.completedSessions ?? 0} 次训练 · 近30天
+            </p>
+          )}
         </div>
 
         <div className="card">
@@ -77,17 +81,19 @@ export default function DashboardPage() {
           <div className="metric-grid">
             <div className="metric-card">
               <div className="metric-title">系统状态</div>
-              <div className="metric-value" style={{ fontSize: 18 }}><StatusPill status={health?.status || "UNKNOWN"} /></div>
+              <div className="task-metric-value" style={{ color: health?.status === "UP" ? "var(--green)" : "var(--red)" }}>
+                {health?.status || "?"}
+              </div>
             </div>
             <div className="metric-card">
               <div className="metric-title">数据库</div>
-              <div className="metric-value" style={{ fontSize: 18, color: health?.checks?.database?.status === "UP" ? "var(--green)" : "var(--red)" }}>
+              <div className="task-metric-value" style={{ color: health?.checks?.database?.status === "UP" ? "var(--green)" : "var(--red)" }}>
                 {health?.checks?.database?.status || "?"}
               </div>
             </div>
             <div className="metric-card">
               <div className="metric-title">消息队列</div>
-              <div className="metric-value" style={{ fontSize: 18, color: health?.checks?.rabbitmq?.status === "UP" ? "var(--green)" : "var(--red)" }}>
+              <div className="task-metric-value" style={{ color: health?.checks?.rabbitmq?.status === "UP" ? "var(--green)" : "var(--red)" }}>
                 {health?.checks?.rabbitmq?.status || "?"}
               </div>
             </div>

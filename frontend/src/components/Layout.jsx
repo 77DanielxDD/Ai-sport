@@ -2,11 +2,12 @@
 import { clearToken, getRole } from "../api";
 
 const baseNavItems = [
-  { to: "/dashboard", label: "系统概览", icon: "◐" },
+  { to: "/dashboard", label: "系统概览", icon: "⌬" },
   { to: "/upload", label: "上传分析", icon: "↑" },
-  { to: "/history", label: "视频历史", icon: "☰" },
-  { to: "/compare", label: "报告对比", icon: "⇔" },
-  { to: "/profile", label: "个人中心", icon: "●" },
+  { to: "/history", label: "视频历史", icon: "⊞" },
+  { to: "/compare", label: "报告对比", icon: "⇄" },
+  { to: "/qa", label: "智能问答", icon: "⚡" },
+  { to: "/profile", label: "个人中心", icon: "◎" },
 ];
 
 export default function Layout() {
@@ -25,10 +26,10 @@ export default function Layout() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-block">
-          <div className="brand-mark">AS</div>
+          <div className="brand-mark">AI</div>
           <div>
-            <h2>AI 运动分析</h2>
-            <p>动作分析工作台</p>
+            <h2>AI Sport</h2>
+            <p>训练分析实验室</p>
           </div>
         </div>
 
@@ -52,7 +53,7 @@ export default function Layout() {
               <div className="sidebar-user-role">{roleLabel}</div>
             </div>
           </div>
-          <button className="ghost" onClick={logout} style={{ marginTop: 4 }}>
+          <button className="ghost" onClick={logout} style={{ marginTop: 6, fontSize: 12 }}>
             退出登录
           </button>
         </div>

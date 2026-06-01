@@ -68,29 +68,29 @@ export default function ReportPage() {
   };
 
   function SeverityBadge({ severity }) {
-    const colors = { high: "var(--red)", medium: "#e6a817", low: "var(--green)" };
-    return <span style={{ fontSize: 11, color: "#fff", background: colors[severity] || "#888", borderRadius: 10, padding: "1px 8px", marginLeft: 8 }}>{severity}</span>;
+    const colors = { high: "var(--red)", medium: "var(--amber)", low: "var(--green)" };
+    return <span style={{ fontSize: 11, color: "#fff", background: colors[severity] || "var(--text-3)", borderRadius: 10, padding: "1px 8px", marginLeft: 8 }}>{severity}</span>;
   }
 
   function PriorityBadge({ priority }) {
-    const colors = { high: "var(--red)", medium: "#e6a817", low: "var(--green)" };
-    return <span style={{ fontSize: 11, color: "#fff", background: colors[priority] || "#888", borderRadius: 10, padding: "1px 8px", marginLeft: 8 }}>{priority}</span>;
+    const colors = { high: "var(--red)", medium: "var(--amber)", low: "var(--green)" };
+    return <span style={{ fontSize: 11, color: "#fff", background: colors[priority] || "var(--text-3)", borderRadius: 10, padding: "1px 8px", marginLeft: 8 }}>{priority}</span>;
   }
 
   const thStyle = { padding: "4px 6px", textAlign: "left", fontWeight: 600, fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap" };
-  const tdStyle = { padding: "4px 6px", borderBottom: "1px solid var(--border-color, #f0f0f0)", fontSize: 12, verticalAlign: "middle" };
+  const tdStyle = { padding: "4px 6px", borderBottom: "1px solid var(--border)", fontSize: 12, verticalAlign: "middle" };
 
   function levelColor(level) {
-    return level === "优秀" ? "var(--green)" : level === "良好" ? "var(--accent)" : level === "一般" ? "#e6a817" : "var(--red)";
+    return level === "优秀" ? "var(--green)" : level === "良好" ? "var(--accent)" : level === "一般" ? "var(--amber)" : "var(--red)";
   }
   function tempoColor(level) {
-    return level === "normal" ? "var(--green)" : level === "fast" ? "#e6a817" : level === "slow" ? "var(--blue)" : "var(--text-2)";
+    return level === "normal" ? "var(--green)" : level === "fast" ? "var(--amber)" : level === "slow" ? "var(--blue)" : "var(--text-2)";
   }
   function tempoLabel(level) {
     return level === "normal" ? "正常" : level === "fast" ? "偏快" : level === "slow" ? "偏慢" : "";
   }
   function symColor(level) {
-    return level === "good" ? "var(--green)" : level === "warning" ? "#e6a817" : "var(--red)";
+    return level === "good" ? "var(--green)" : level === "warning" ? "var(--amber)" : "var(--red)";
   }
   function symLabel(level) {
     return level === "good" ? "良好" : level === "warning" ? "偏差" : level === "bad" ? "不足" : "";
@@ -98,7 +98,7 @@ export default function ReportPage() {
 
   function MetricCell({ score, level }) {
     if (score == null) return <span>-</span>;
-    const colors = { good: "var(--green)", warning: "#e6a817", bad: "var(--red)" };
+    const colors = { good: "var(--green)", warning: "var(--amber)", bad: "var(--red)" };
     return (
       <span style={{ color: colors[level] || "var(--text)" }}>
         {score} <span style={{ fontSize: 10 }}>{level === "good" ? "✓" : level === "warning" ? "△" : "✗"}</span>
@@ -121,7 +121,7 @@ export default function ReportPage() {
         <div style={{ fontWeight: 500 }}>建议：{ev.suggestion || ev.tip}</div>
         {images && images[idx] && (
           <img src={resolveUrl(images[idx])} alt={`rep ${ev.repIndex}`} loading="lazy"
-            style={{ marginTop: 6, maxWidth: "100%", maxHeight: 200, borderRadius: 6, border: "1px solid var(--border-color, #e0e0e0)" }} />
+            style={{ marginTop: 6, maxWidth: "100%", maxHeight: 200, borderRadius: 6, border: "1px solid var(--border-color, var(--border))" }} />
         )}
       </div>
     );
@@ -181,7 +181,7 @@ export default function ReportPage() {
                   <div className="rep-evals-table" style={{ maxHeight: 360, overflowY: "auto" }}>
                     <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
                       <thead>
-                        <tr style={{ borderBottom: "1px solid var(--border-color, #e0e0e0)" }}>
+                        <tr style={{ borderBottom: "1px solid var(--border-color, var(--border))" }}>
                           <th style={thStyle}>#</th>
                           <th style={thStyle}>综合</th>
                           <th style={thStyle}>幅度</th>
@@ -198,7 +198,7 @@ export default function ReportPage() {
                             onClick={() => setActiveRepIdx(activeRepIdx === i ? null : i)}
                             style={{
                               cursor: "pointer",
-                              background: activeRepIdx === i ? "var(--accent-bg, #e8f4fd)" : "transparent",
+                              background: activeRepIdx === i ? "var(--accent-dim)" : "transparent",
                               transition: "background 0.15s",
                             }}
                           >
@@ -292,7 +292,7 @@ export default function ReportPage() {
                     <div style={{ fontWeight: 600, marginBottom: 4, color: "var(--blue)" }}>工具调用</div>
                     {qaAnswer.toolCalls.map((tc, i) => (
                       <div key={i} style={{ marginBottom: 2 }}>
-                        {tc.success ? "✓" : "✗"} <code style={{ background: "#eee", padding: "0 4px" }}>{tc.tool}</code> — {tc.summary} ({tc.durationMs}ms)
+                        {tc.success ? "✓" : "✗"} <code style={{ background: "var(--bg-2)", padding: "0 4px" }}>{tc.tool}</code> — {tc.summary} ({tc.durationMs}ms)
                       </div>
                     ))}
                   </div>
