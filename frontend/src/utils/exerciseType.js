@@ -41,12 +41,12 @@ export function exerciseTypeLabel(type) {
 }
 
 export const EXERCISE_OPTIONS = [
-  { value: "PUSHUP", label: "俯卧撑" },
-  { value: "SQUAT", label: "深蹲" },
-  { value: "BENCH_PRESS", label: "卧推" },
-  { value: "DEADLIFT", label: "硬拉" },
-  { value: "DUMBBELL_SHOULDER_PRESS", label: "哑铃推肩" },
-  { value: "DUMBBELL_LATERAL_RAISE", label: "哑铃侧平举" },
-  { value: "DUMBBELL_BICEP_CURL", label: "哑铃二头弯举" },
-  { value: "PULL_UP", label: "引体向上" },
+  { value: "PUSHUP", label: "俯卧撑", tip: "侧面拍摄，重点看肘膝角度" },
+  { value: "SQUAT", label: "深蹲", tip: "侧面拍摄，重点看髋膝踝关节" },
+  { value: "BENCH_PRESS", label: "卧推", tip: "侧面拍摄，重点看肩肘轨迹" },
+  { value: "DEADLIFT", label: "硬拉", tip: "侧面拍摄，重点看脊柱与髋铰链" },
+  { value: "DUMBBELL_SHOULDER_PRESS", label: "哑铃推肩", tip: "正面/侧面均可，重点看肩关节稳定" },
+  { value: "DUMBBELL_LATERAL_RAISE", label: "哑铃侧平举", tip: "正面拍摄，重点看肩外展角度" },
+  { value: "DUMBBELL_BICEP_CURL", label: "哑铃二头弯举", tip: "侧面拍摄，重点看肘关节活动范围" },
+  { value: "PULL_UP", label: "引体向上", tip: "侧面拍摄，重点看肩胛与肘部动作" },
 ];

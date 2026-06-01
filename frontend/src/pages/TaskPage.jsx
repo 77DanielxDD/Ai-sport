@@ -4,11 +4,25 @@ import { cancelVideo, getVideoAnalysis, getVideoStatus, listVideoTasks, retryVid
 import StatusPill from "../components/StatusPill";
 import { exerciseTypeLabel } from "../utils/exerciseType";
 
+const STAGES = ["已上传", "排队中", "姿态识别", "动作评分", "报告生成", "完成"];
+
 function formatMs(ms) {
   if (ms == null || Number.isNaN(Number(ms))) return "-";
   const n = Number(ms);
   if (n < 1000) return `${n} ms`;
   return `${(n / 1000).toFixed(2)} s`;
+}
+
+function stageIndex(status, hasAnalysis) {
+  if (hasAnalysis) return 5; // 完成
+  switch (status) {
+    case "UPLOADED": return 0;
+    case "PROCESSING": return 2;
+    case "COMPLETED": return 5;
+    case "FAILED": return -1;
+    case "CANCELLED": return -1;
+    default: return 0;
+  }
 }
 
 export default function TaskPage() {
@@ -18,14 +32,16 @@ export default function TaskPage() {
   const [tasks, setTasks] = useState([]);
   const [error, setError] = useState("");
   const [canceling, setCanceling] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const timer = useRef(null);
 
-  const done = useMemo(() => statusInfo?.status === "COMPLETED", [statusInfo]);
-  const cancelled = useMemo(() => statusInfo?.status === "CANCELLED", [statusInfo]);
-  const canCancel = useMemo(
-    () => statusInfo?.status === "UPLOADED" || statusInfo?.status === "PROCESSING",
-    [statusInfo],
-  );
+  const status = statusInfo?.status;
+  const hasAnalysis = !!analysis;
+  const done = status === "COMPLETED";
+  const cancelled = status === "CANCELLED";
+  const failed = status === "FAILED";
+  const canCancel = status === "UPLOADED" || status === "PROCESSING";
+  const currentStage = stageIndex(status, hasAnalysis);
   const latestTask = useMemo(() => (tasks.length > 0 ? tasks[0] : null), [tasks]);
 
   useEffect(() => {
@@ -38,9 +54,7 @@ export default function TaskPage() {
         setStatusInfo(s);
         listVideoTasks(videoId).then(setTasks).catch(() => {});
 
-        if (s?.status === "CANCELLED") {
-          return;
-        }
+        if (s?.status === "CANCELLED") return;
 
         try {
           const a = await getVideoAnalysis(videoId);
@@ -85,16 +99,20 @@ export default function TaskPage() {
   }, [videoId]);
 
   async function doRetry() {
-    setError("");
-    await retryVideo(videoId);
-    window.location.reload();
+    setError(""); setRetrying(true);
+    try {
+      await retryVideo(videoId);
+      window.location.reload();
+    } catch (e) {
+      setError(e?.body?.error || e.message || "重试失败");
+      setRetrying(false);
+    }
   }
 
   async function doCancel() {
     const ok = window.confirm("确认取消当前分析任务吗？");
     if (!ok) return;
-    setCanceling(true);
-    setError("");
+    setCanceling(true); setError("");
     try {
       await cancelVideo(videoId);
       setStatusInfo((prev) => ({ ...(prev || {}), status: "CANCELLED" }));
@@ -107,40 +125,50 @@ export default function TaskPage() {
   }
 
   return (
-    <div className="card">
-      <h1>任务 #{videoId}</h1>
-
+    <div>
+      <h1>分析任务 #{videoId}</h1>
       {statusInfo?.exerciseType && (
-        <p>
-          动作类型：<b>{exerciseTypeLabel(statusInfo.exerciseType)}</b>
+        <p className="section-subtitle">
+          动作：{exerciseTypeLabel(statusInfo.exerciseType)}
+          <span style={{ marginLeft: 10 }}><StatusPill status={status || "UNKNOWN"} /></span>
         </p>
       )}
-      <p>
-        状态：<StatusPill status={statusInfo?.status || "UNKNOWN"} />
-      </p>
-      {statusInfo?.endToEndMs != null && <p>端到端耗时：{formatMs(statusInfo.endToEndMs)}</p>}
-      {error && <p className="error">{error}</p>}
 
-      {latestTask && (
-        <div className="task-metric-grid">
-          <div className="task-metric-card">
-            <div className="task-metric-title">排队耗时</div>
-            <div className="task-metric-value">{formatMs(latestTask.queueMs)}</div>
-          </div>
-          <div className="task-metric-card">
-            <div className="task-metric-title">执行耗时</div>
-            <div className="task-metric-value">{formatMs(latestTask.runMs)}</div>
-          </div>
-          <div className="task-metric-card">
-            <div className="task-metric-title">总耗时</div>
-            <div className="task-metric-value">{formatMs(latestTask.totalMs)}</div>
-          </div>
+      {/* Stage progress */}
+      <div className="card fade-in">
+        <h3>分析进度</h3>
+        <div className="stage-progress">
+          {STAGES.map((label, i) => {
+            let cls = "stage-item";
+            if (currentStage >= 0 && i < currentStage) cls += " done";
+            else if (i === currentStage) cls += " current";
+            if (failed && i === currentStage) cls = "stage-item failed";
+            return (
+              <div key={i} className={cls}>
+                <span className="stage-label-sm">{i + 1}</span>
+                {label}
+              </div>
+            );
+          })}
         </div>
-      )}
+        {status === "PROCESSING" && (
+          <p style={{ fontSize: 12, color: "var(--text-2)", marginTop: 8 }}>
+            分析正在进行中，页面会自动刷新...
+          </p>
+        )}
+      </div>
 
-      <div className="inline-actions" style={{ margin: "8px 0 12px" }}>
-        {done && <Link to={`/reports/${videoId}`}>查看分析报告</Link>}
-        {statusInfo?.status === "FAILED" && <button onClick={doRetry}>重试分析</button>}
+      {/* Error / action states */}
+      {error && <p className="error" style={{ marginTop: 12 }}>{error}</p>}
+
+      <div className="inline-actions" style={{ margin: "12px 0" }}>
+        {done && <Link to={`/reports/${videoId}`} className="btn btn-sm" style={{ background: "var(--accent)", color: "#fff", padding: "8px 20px", borderRadius: "var(--radius-xs)", fontWeight: 600 }}>查看分析报告</Link>}
+        {failed && (
+          <button onClick={doRetry} disabled={retrying} style={{ width: "auto", padding: "8px 20px" }}>
+            {retrying ? "重试中..." : "重新分析"}
+          </button>
+        )}
+        {cancelled && <Link to="/upload" className="btn btn-sm" style={{ background: "var(--accent)", color: "#fff", padding: "8px 20px", borderRadius: "var(--radius-xs)", fontWeight: 600 }}>重新上传</Link>}
         {canCancel && (
           <button className="danger-btn" disabled={canceling} onClick={doCancel}>
             {canceling ? "取消中..." : "取消任务"}
@@ -148,45 +176,71 @@ export default function TaskPage() {
         )}
       </div>
 
-      {cancelled && <p>任务已取消，你可以重新上传视频或重新发起分析。</p>}
+      {cancelled && <p style={{ color: "var(--text-2)", fontSize: 13 }}>任务已取消，你可以重新上传视频或重新发起分析。</p>}
+      {failed && <p style={{ color: "var(--text-2)", fontSize: 13 }}>分析失败。请检查视频是否符合拍摄建议后重试。</p>}
 
-      <details>
-        <summary>任务状态原始 JSON</summary>
-        <pre>{JSON.stringify(statusInfo, null, 2)}</pre>
-      </details>
-
-      {analysis && (
-        <details>
-          <summary>分析结果原始 JSON</summary>
-          <pre>{JSON.stringify(analysis, null, 2)}</pre>
-        </details>
+      {/* Timing metrics */}
+      {latestTask && (
+        <div className="card fade-in fade-in-1">
+          <h3>任务耗时</h3>
+          <div className="metric-grid">
+            <div className="metric-card">
+              <div className="metric-title">排队耗时</div>
+              <div className="task-metric-value">{formatMs(latestTask.queueMs)}</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-title">执行耗时</div>
+              <div className="task-metric-value">{formatMs(latestTask.runMs)}</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-title">总耗时</div>
+              <div className="task-metric-value">{formatMs(latestTask.totalMs)}</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-title">尝试次数</div>
+              <div className="task-metric-value">{latestTask.attempt ?? "-"}</div>
+            </div>
+          </div>
+        </div>
       )}
 
-      <div className="card">
-        <h3>任务时间线</h3>
-        {tasks.length === 0 ? (
-          <p>暂无任务记录</p>
-        ) : (
+      {/* Debug info — collapsed by default */}
+      <details style={{ marginTop: 12, fontSize: 12, color: "var(--text-2)" }}>
+        <summary>调试信息</summary>
+        <div style={{ marginTop: 8 }}>
+          <p style={{ fontSize: 11, marginBottom: 4 }}>任务状态</p>
+          <pre>{JSON.stringify(statusInfo, null, 2)}</pre>
+          {analysis && (
+            <>
+              <p style={{ fontSize: 11, margin: "8px 0 4px" }}>分析结果</p>
+              <pre>{JSON.stringify(analysis, null, 2)}</pre>
+            </>
+          )}
+        </div>
+      </details>
+
+      {/* Timeline */}
+      {tasks.length > 0 && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <h3>任务记录</h3>
           <ul className="timeline">
             {tasks.map((t) => (
               <li key={t.id}>
-                <div>
-                  <b>任务 #{t.id}</b>（第 {t.attempt} 次）
+                <div style={{ fontWeight: 600, fontSize: 13 }}>
+                  任务 #{t.id}<span style={{ color: "var(--text-2)", fontWeight: 400, marginLeft: 8 }}>第 {t.attempt} 次</span>
                 </div>
-                <div>
-                  状态：<StatusPill status={t.status || "UNKNOWN"} />
-                  {t.canCancel ? <span style={{ marginLeft: 8 }}>可取消</span> : <span style={{ marginLeft: 8 }}>不可取消</span>}
+                <div style={{ marginTop: 2 }}>
+                  <StatusPill status={t.status || "UNKNOWN"} />
                 </div>
-                <div>排队：{t.queuedAt || "-"}</div>
-                <div>开始：{t.startedAt || "-"}</div>
-                <div>结束：{t.finishedAt || "-"}</div>
-                <div>排队耗时：{formatMs(t.queueMs)} | 执行耗时：{formatMs(t.runMs)} | 总耗时：{formatMs(t.totalMs)}</div>
-                {t.errorMessage && <div className="error">错误：{t.errorMessage}</div>}
+                <div style={{ fontSize: 12, color: "var(--text-2)", marginTop: 2 }}>
+                  排队：{formatMs(t.queueMs)} | 执行：{formatMs(t.runMs)} | 总计：{formatMs(t.totalMs)}
+                </div>
+                {t.errorMessage && <div className="error" style={{ fontSize: 12 }}>{t.errorMessage}</div>}
               </li>
             ))}
           </ul>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
