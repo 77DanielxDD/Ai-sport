@@ -1,7 +1,7 @@
 import useStore from "./store";
 
 const RAW_API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8080";
-const API_BASE = RAW_API_BASE === "/" ? "" : RAW_API_BASE.replace(/\/+$/, "");
+export const API_BASE = RAW_API_BASE === "/" ? "" : RAW_API_BASE.replace(/\/+$/, "");
 
 export function getToken() {
   return localStorage.getItem("ai_sport_token") || "";
@@ -283,4 +283,3 @@ export function askAgent(question, videoId = null) {
   });
 }
 
-export { API_BASE };

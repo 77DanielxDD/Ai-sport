@@ -443,6 +443,79 @@ tbody tr:hover { background: var(--bg-2); }
 
 .preset-chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
 
+/* ===== Compare Page ===== */
+.compare-conclusion {
+  text-align: center; padding: 16px 20px;
+  background: var(--bg); border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.compare-verdict {
+  font-size: 32px; font-weight: 800; letter-spacing: -0.03em;
+  margin-bottom: 8px;
+}
+
+.compare-conclusion-deltas {
+  display: flex; justify-content: center; gap: 28px; margin-bottom: 8px;
+  font-size: 14px; color: var(--text-2); font-family: var(--font-mono);
+}
+
+.compare-metrics-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px;
+}
+
+.compare-metric-card {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-xs); padding: 12px 14px;
+}
+
+.compare-metric-label { font-size: 10px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; font-weight: 600; }
+
+.compare-metric-row {
+  display: flex; align-items: center; font-size: 14px;
+  font-family: var(--font-mono); font-weight: 600;
+}
+
+.compare-metric-explain {
+  margin-top: 4px; font-size: 11px; color: var(--text-3);
+}
+
+.compare-bar-dual {
+  height: 8px; border-radius: 4px; background: var(--bg-2);
+  position: relative; overflow: hidden;
+}
+
+.compare-bar-fill-left {
+  position: absolute; left: 0; top: 0; height: 100%;
+  background: var(--accent); opacity: 0.5;
+  border-radius: 4px 0 0 4px;
+}
+
+.compare-bar-fill-right {
+  position: absolute; left: 0; top: 0; height: 100%;
+  background: var(--accent);
+  border-radius: 0 4px 4px 0; z-index: 1;
+  min-width: 2px;
+}
+
+.keyframe-compare-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px;
+}
+
+.keyframe-pair {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  padding: 10px; background: var(--bg); border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.keyframe-side img {
+  width: 100%; border-radius: var(--radius-xs); display: block;
+}
+
+.compare-trend {
+  position: relative; width: 100%;
+}
+
 /* ===== Upload Progress ===== */
 .upload-progress {
   margin-top: 10px; height: 8px;
