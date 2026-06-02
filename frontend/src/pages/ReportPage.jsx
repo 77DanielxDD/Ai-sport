@@ -52,7 +52,7 @@ export default function ReportPage() {
   const [qaLoading, setQaLoading] = useState(false);
   const [qaError, setQaError] = useState("");
   const [activeRepIdx, setActiveRepIdx] = useState(null);
-  const [modalImage, setModalImage] = useState(null);
+  const [modalIndex, setModalIndex] = useState(null);
 
   async function submitQa(e) {
     e.preventDefault();
@@ -75,16 +75,20 @@ export default function ReportPage() {
   }, [videoId]);
 
   useEffect(() => {
-    if (!modalImage) return;
+    if (modalIndex == null || reportImages.length === 0) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const onKey = (e) => { if (e.key === "Escape") setModalImage(null); };
+    const onKey = (e) => {
+      if (e.key === "Escape") { setModalIndex(null); return; }
+      if (e.key === "ArrowLeft") { setModalIndex((p) => (p > 0 ? p - 1 : reportImages.length - 1)); return; }
+      if (e.key === "ArrowRight") { setModalIndex((p) => (p < reportImages.length - 1 ? p + 1 : 0)); return; }
+    };
     document.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = prev;
       document.removeEventListener("keydown", onKey);
     };
-  }, [modalImage]);
+  }, [modalIndex, reportImages.length]);
 
   const analysis = useMemo(() => data?.analysis || {}, [data]);
   const reportImages = analysis.report_images || [];
@@ -243,47 +247,46 @@ export default function ReportPage() {
               )}
             </div>
 
-            {/* Keyframes + Chart */}
+            {/* Keyframes + Chart + AI Advice */}
             <div>
               <div className="card fade-in fade-in-2" style={{ marginBottom: 16 }}>
                 <h3>关键帧图集</h3>
                 {reportImages.length === 0 ? (
-                  <p style={{ color: "var(--text-2)" }}>暂无关键帧</p>
+                  <p style={{ color: "var(--text-2)", fontSize: 13 }}>暂无关键帧图像</p>
                 ) : (
-                  <div className="img-grid">
-                    {reportImages.map((url) => (
-                      <figure key={url}>
-                        <img src={resolveUrl(url)} alt="关键帧" loading="lazy"
-                          onClick={() => setModalImage(resolveUrl(url))}
-                          style={{ cursor: "pointer" }} />
-                      </figure>
+                  <div className="thumbnail-grid">
+                    {reportImages.map((url, i) => (
+                      <div key={i}
+                        className={`thumb-item${modalIndex === i ? " thumb-active" : ""}`}
+                        onClick={() => setModalIndex(i)}>
+                        <img src={resolveUrl(url)} alt={`Rep ${i + 1}`} loading="lazy" />
+                        <span className="thumb-label">Rep {i + 1}</span>
+                      </div>
                     ))}
                   </div>
                 )}
               </div>
-              <div className="card fade-in fade-in-2">
+              <div className="card fade-in fade-in-2" style={{ marginBottom: 16 }}>
                 <h3>角度趋势</h3>
                 <SimpleLineChart points={linePoints} />
               </div>
+              {(overallFeedback || suggestions.length > 0) && (
+                <div className="card card-highlight fade-in fade-in-2">
+                  <h3>AI 改进建议</h3>
+                  {overallFeedback && (
+                    <p style={{ fontWeight: 500, marginBottom: 8, fontSize: 13 }}>{overallFeedback}</p>
+                  )}
+                  {suggestions.length > 0 && (
+                    <ul style={{ paddingLeft: 18 }}>
+                      {suggestions.map((s, idx) => (
+                        <li key={idx} style={{ marginBottom: 3, color: "var(--text)", fontSize: 12, lineHeight: 1.5 }}>{s}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-
-          {/* AI Advice (no side stripe) */}
-          {(overallFeedback || suggestions.length > 0) && (
-            <div className="card card-highlight fade-in fade-in-3">
-              <h3>AI 改进建议</h3>
-              {overallFeedback && (
-                <p style={{ fontWeight: 500, marginBottom: 10, fontSize: 14 }}>{overallFeedback}</p>
-              )}
-              {suggestions.length > 0 && (
-                <ul style={{ paddingLeft: 18 }}>
-                  {suggestions.map((s, idx) => (
-                    <li key={idx} style={{ marginBottom: 4, color: "var(--text)", fontSize: 13, lineHeight: 1.5 }}>{s}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
 
           {/* Zone 4: Agent Q&A */}
           <div className="card fade-in fade-in-3">
@@ -375,10 +378,18 @@ export default function ReportPage() {
             )}
           </div>
 
-          {/* Image Modal */}
-          {modalImage && (
-            <div className="img-modal-overlay" onClick={() => setModalImage(null)}>
-              <img src={modalImage} alt="关键帧放大" onClick={(e) => e.stopPropagation()} />
+          {/* Image Lightbox */}
+          {modalIndex != null && reportImages[modalIndex] && (
+            <div className="lightbox-overlay" onClick={() => setModalIndex(null)}>
+              <button className="lightbox-close" onClick={() => setModalIndex(null)}>✕</button>
+              {reportImages.length > 1 && (
+                <button className="lightbox-prev" onClick={(e) => { e.stopPropagation(); setModalIndex(modalIndex > 0 ? modalIndex - 1 : reportImages.length - 1); }}>‹</button>
+              )}
+              <img src={resolveUrl(reportImages[modalIndex])} alt={`关键帧 Rep ${modalIndex + 1}`} onClick={(e) => e.stopPropagation()} />
+              {reportImages.length > 1 && (
+                <button className="lightbox-next" onClick={(e) => { e.stopPropagation(); setModalIndex(modalIndex < reportImages.length - 1 ? modalIndex + 1 : 0); }}>›</button>
+              )}
+              <div className="lightbox-counter">Rep {modalIndex + 1} / {reportImages.length}</div>
             </div>
           )}
         </>
