@@ -87,7 +87,7 @@ if (-not $SkipAi) {
             $mediaBaseDir = Join-Path $RepoRoot "uploaded-videos\output"
             New-Item -ItemType Directory -Force -Path $mediaBaseDir | Out-Null
             New-Item -ItemType Directory -Force -Path (Join-Path $aiDir ".mplconfig") | Out-Null
-            Start-ManagedProcess "ai" "cmd.exe" @("/c", "set MPLCONFIGDIR=$aiDir\.mplconfig && set AI_MEDIA_BASE_DIR=$mediaBaseDir && python -m uvicorn app.main:app --host 127.0.0.1 --port 8000") $aiDir
+            Start-ManagedProcess "ai" "cmd.exe" @("/s", "/c", "`"set `"MPLCONFIGDIR=$aiDir\.mplconfig`" && set `"AI_MEDIA_BASE_DIR=$mediaBaseDir`" && python -m uvicorn app.main:app --host 127.0.0.1 --port 8000`"") $aiDir
         } else {
             Write-Host "AI service already running." -ForegroundColor Green
         }
@@ -98,33 +98,33 @@ if (-not $SkipAi) {
 Write-Host "`n=== Starting backend ===" -ForegroundColor Cyan
 $mediaOutputDir = Join-Path $RepoRoot "uploaded-videos\output"
 $backendEnv = @(
-    "set DEV_DB_PASSWORD=$DbPassword",
-    "set APP_MEDIA_BASE_DIR=$mediaOutputDir",
-    "set DEV_MEDIA_BASE_DIR=$mediaOutputDir",
-    "set APP_REDIS_CACHE_ENABLED=true",
-    "set APP_REDIS_HOST=127.0.0.1",
-    "set APP_REDIS_PORT=6379",
-    "set JAVA_TOOL_OPTIONS=-XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Dspring.main.lazy-initialization=false"
+    "set `"DEV_DB_PASSWORD=$DbPassword`"",
+    "set `"APP_MEDIA_BASE_DIR=$mediaOutputDir`"",
+    "set `"DEV_MEDIA_BASE_DIR=$mediaOutputDir`"",
+    "set `"APP_REDIS_CACHE_ENABLED=true`"",
+    "set `"APP_REDIS_HOST=127.0.0.1`"",
+    "set `"APP_REDIS_PORT=6379`"",
+    "set `"JAVA_TOOL_OPTIONS=-XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Dspring.main.lazy-initialization=false`""
 )
 
 if ($hasCos) {
     $backendEnv += @(
-        "set DEV_OBJECT_STORAGE_ENABLED=true",
-        "set DEV_OBJECT_STORAGE_PROVIDER=cos",
-        "set DEV_OBJECT_STORAGE_REGION=$CosRegion",
-        "set DEV_OBJECT_STORAGE_BUCKET=$CosBucket",
-        "set DEV_OBJECT_STORAGE_ACCESS_KEY=$CosSecretId",
-        "set DEV_OBJECT_STORAGE_SECRET_KEY=$CosSecretKey",
-        "set DEV_OBJECT_STORAGE_PUBLIC_BASE_URL=$CosPublicBaseUrl"
+        "set `"DEV_OBJECT_STORAGE_ENABLED=true`"",
+        "set `"DEV_OBJECT_STORAGE_PROVIDER=cos`"",
+        "set `"DEV_OBJECT_STORAGE_REGION=$CosRegion`"",
+        "set `"DEV_OBJECT_STORAGE_BUCKET=$CosBucket`"",
+        "set `"DEV_OBJECT_STORAGE_ACCESS_KEY=$CosSecretId`"",
+        "set `"DEV_OBJECT_STORAGE_SECRET_KEY=$CosSecretKey`"",
+        "set `"DEV_OBJECT_STORAGE_PUBLIC_BASE_URL=$CosPublicBaseUrl`""
     )
 }
 
 if (-not [string]::IsNullOrWhiteSpace($LlmApiKey)) {
-    $backendEnv += "set APP_LLM_API_KEY=$LlmApiKey"
+    $backendEnv += "set `"APP_LLM_API_KEY=$LlmApiKey`""
 }
 
 $envChain = ($backendEnv -join " && ") + " && mvn -q -DskipTests spring-boot:run"
-Start-ManagedProcess "backend" "cmd.exe" @("/c", $envChain) $RepoRoot
+Start-ManagedProcess "backend" "cmd.exe" @("/s", "/c", "`"$envChain`"") $RepoRoot
 
 # ── 5) Start frontend ───────────────────────────────────────────────────
 if (-not $SkipFrontend) {
@@ -135,7 +135,7 @@ if (-not $SkipFrontend) {
         Push-Location $frontendDir
         try { & cmd.exe /c "npm install" | Out-Host } finally { Pop-Location }
     }
-    Start-ManagedProcess "frontend" "cmd.exe" @("/c", "npm run dev -- --host 0.0.0.0 --port 5173") $frontendDir
+    Start-ManagedProcess "frontend" "cmd.exe" @("/s", "/c", "`"npm run dev -- --host 0.0.0.0 --port 5173`"") $frontendDir
 }
 
 Write-Host "`n=== Done ===" -ForegroundColor Green
