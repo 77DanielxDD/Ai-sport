@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     profiles: ["with-ai"]
     environment:
+      AI_MEDIA_BASE_DIR: /app/uploaded-videos/output
       AI_COS_ENABLED: ${AI_COS_ENABLED:-false}
       AI_COS_REGION: ${APP_OBJECT_STORAGE_REGION}
       AI_COS_BUCKET: ${APP_OBJECT_STORAGE_BUCKET}
@@ -14,6 +15,8 @@ services:
       AI_COS_PUBLIC_BASE_URL: ${APP_OBJECT_STORAGE_PUBLIC_BASE_URL}
     expose:
       - "8000"
+    volumes:
+      - backend_uploads:/app/uploaded-videos
 
   mysql:
     image: mysql:8.4
@@ -71,6 +74,8 @@ services:
       RABBIT_PASSWORD: ${RABBITMQ_PASSWORD}
       RABBIT_VHOST: /
       AI_SERVICE_BASE_URL: ${AI_SERVICE_BASE_URL}
+      VIDEO_UPLOAD_PATH: /app/uploaded-videos
+      APP_MEDIA_BASE_DIR: /app/uploaded-videos/output
       APP_JWT_SECRET: ${APP_JWT_SECRET}
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS}
       APP_OBJECT_STORAGE_ENABLED: ${APP_OBJECT_STORAGE_ENABLED}
