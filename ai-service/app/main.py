@@ -16,6 +16,10 @@ try:
 except Exception:  # pragma: no cover
     mp = None
 
+TARGET_ANALYSIS_FPS = float(os.getenv("AI_ANALYSIS_TARGET_FPS", "15"))
+MAX_ANALYSIS_WIDTH = int(os.getenv("AI_ANALYSIS_MAX_WIDTH", "960"))
+MAX_VIDEO_DURATION_SECONDS = float(os.getenv("AI_MAX_VIDEO_DURATION_SECONDS", "35"))
+
 
 class AnalyzeRequest(BaseModel):
     video_id: int = Field(..., ge=1)
@@ -228,6 +232,14 @@ def process_video(
     fps = cap.get(cv2.CAP_PROP_FPS)
     if not fps or fps <= 1:
         fps = 25.0
+
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    duration_sec = frame_count / fps if fps > 0 else 0
+    if duration_sec > MAX_VIDEO_DURATION_SECONDS:
+        cap.release()
+        raise HTTPException(status_code=400, detail=f"Video duration {duration_sec:.1f}s exceeds {MAX_VIDEO_DURATION_SECONDS:.0f}s limit")
+
+    frame_step = max(1, int(round(fps / TARGET_ANALYSIS_FPS))) if TARGET_ANALYSIS_FPS > 0 else 1
     min_gap_frames = max(1, int(rule.min_gap_seconds * fps))
 
     pose = mp.solutions.pose.Pose(
@@ -247,6 +259,15 @@ def process_video(
         ok, frame = cap.read()
         if not ok:
             break
+
+        if frame_idx % frame_step != 0:
+            frame_idx += 1
+            continue
+
+        h, w = frame.shape[:2]
+        if w > MAX_ANALYSIS_WIDTH:
+            scale = MAX_ANALYSIS_WIDTH / w
+            frame = cv2.resize(frame, (MAX_ANALYSIS_WIDTH, int(h * scale)))
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         pred = pose.process(rgb)

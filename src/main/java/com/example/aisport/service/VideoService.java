@@ -120,6 +120,10 @@ public class VideoService {
     }
 
     public ExerciseVideo saveVideo(MultipartFile file, User user, String exerciseType) throws IOException {
+        return saveVideo(file, user, exerciseType, null);
+    }
+
+    public ExerciseVideo saveVideo(MultipartFile file, User user, String exerciseType, Double durationSeconds) throws IOException {
         String normalizedType = normalizeExerciseType(exerciseType);
         String original = storageService.safeOriginalFilename(file.getOriginalFilename());
         String fileName = System.currentTimeMillis() + "_" + original;
@@ -148,6 +152,9 @@ public class VideoService {
         video.setStatus(ExerciseVideo.VideoStatus.UPLOADED);
         video.setFileSizeMb(file.getSize() / (1024.0 * 1024.0));
         video.setUploadedAt(LocalDateTime.now());
+        if (durationSeconds != null) {
+            video.setDurationSeconds(durationSeconds);
+        }
 
         ExerciseVideo savedVideo = videoRepository.save(video);
 

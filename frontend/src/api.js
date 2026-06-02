@@ -95,8 +95,54 @@ export function uploadVideo({ file, exerciseType }) {
   form.append("file", file);
   form.append("exerciseType", exerciseType);
   return request("/api/videos/upload", { method: "POST", body: form }).then((r) => {
-    useStore.getState().setVideos([]); // Invalidate cache
+    useStore.getState().setVideos([]);
     return r;
+  });
+}
+
+export function uploadVideoWithProgress({ file, exerciseType, durationSec, onProgress }) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("exerciseType", exerciseType);
+  if (durationSec != null) form.append("durationSeconds", String(durationSec));
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}/api/videos/upload`);
+
+    const token = getToken();
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      let body = null;
+      try { body = xhr.responseText ? JSON.parse(xhr.responseText) : null; }
+      catch { body = xhr.responseText; }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        useStore.getState().setVideos([]);
+        resolve(body);
+        return;
+      }
+
+      if (xhr.status === 401) {
+        clearToken();
+        window.location.replace("/login");
+      }
+
+      const error = new Error(typeof body === "string" ? body : body?.error || "上传失败");
+      error.status = xhr.status;
+      error.body = body;
+      reject(error);
+    };
+
+    xhr.onerror = () => reject(new Error("网络错误，上传失败"));
+    xhr.send(form);
   });
 }
 

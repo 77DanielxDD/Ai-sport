@@ -51,14 +51,15 @@ public class VideoController {
     public ResponseEntity<?> uploadVideo(@RequestParam("file") MultipartFile file,
                                          @RequestParam(value = "username", required = false) String username,
                                          Principal principal,
-                                         @RequestParam("exerciseType") String exerciseType) {
+                                         @RequestParam("exerciseType") String exerciseType,
+                                         @RequestParam(value = "durationSeconds", required = false) Double durationSeconds) {
         try {
             String effectiveUsername = principal != null ? principal.getName() : username;
             Optional<User> user = userService.findByUsername(effectiveUsername);
             if (user.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "User not found"));
             if (file.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Please select a file"));
 
-            ExerciseVideo savedVideo = videoService.saveVideo(file, user.get(), exerciseType);
+            ExerciseVideo savedVideo = videoService.saveVideo(file, user.get(), exerciseType, durationSeconds);
             Long latestTaskId = taskService.findLatestByVideoId(savedVideo.getId()).map(AnalysisTask::getId).orElse(null);
 
             Map<String, Object> response = new HashMap<>();

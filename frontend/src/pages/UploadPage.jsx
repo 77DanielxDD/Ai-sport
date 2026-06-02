@@ -1,7 +1,10 @@
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { uploadVideo } from "../api";
+import { uploadVideoWithProgress } from "../api";
 import { EXERCISE_OPTIONS } from "../utils/exerciseType";
+
+const MAX_VIDEO_DURATION_SEC = 30;
+const MAX_VIDEO_SIZE_MB = 150;
 
 function formatSize(bytes) {
   if (bytes == null) return "-";
@@ -25,11 +28,21 @@ export default function UploadPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const inputRef = useRef(null);
 
-  const previewUrl = useMemo(() => file ? URL.createObjectURL(file) : null, [file]);
-  const durationOk = durationSec == null || durationSec <= 15;
+  const durationOk = durationSec == null || durationSec <= MAX_VIDEO_DURATION_SEC;
+  const sizeOk = !file || file.size <= MAX_VIDEO_SIZE_MB * 1024 * 1024;
+  const canSubmit = !!file && durationOk && sizeOk && !loading;
   const selectedOption = EXERCISE_OPTIONS.find((o) => o.value === exerciseType);
+
+  useEffect(() => {
+    if (!file) { setPreviewUrl(null); return; }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   const onFileChange = useCallback(async (f) => {
     setFile(f); setDurationSec(null); setError("");
@@ -37,6 +50,9 @@ export default function UploadPage() {
     const isVideo = f.type.startsWith("video/") || /\.(mp4|avi|mov|webm|mkv)$/i.test(f.name);
     if (!isVideo) {
       setFile(null); setError("请选择视频文件（MP4、AVI、MOV 等）"); return;
+    }
+    if (f.size > MAX_VIDEO_SIZE_MB * 1024 * 1024) {
+      setFile(null); setError(`视频文件超过 ${MAX_VIDEO_SIZE_MB}MB，请压缩后重新上传`); return;
     }
     try { setDurationSec(await getVideoDuration(f)); } catch { setDurationSec(null); }
   }, []);
@@ -47,16 +63,19 @@ export default function UploadPage() {
   }, [onFileChange]);
 
   async function submit(e) {
-    e.preventDefault(); setError("");
+    e.preventDefault(); setError(""); setUploadProgress(0);
     if (!file) return setError("请选择视频文件");
-    if (!durationOk) return setError(`视频超过 15 秒限制，请裁剪后重新上传`);
+    if (!durationOk) return setError(`视频超过 ${MAX_VIDEO_DURATION_SEC} 秒限制，请裁剪后重新上传`);
+    if (!sizeOk) return setError(`视频文件超过 ${MAX_VIDEO_SIZE_MB}MB，请压缩后重新上传`);
     setLoading(true);
     try {
-      const resp = await uploadVideo({ file, exerciseType });
+      const resp = await uploadVideoWithProgress({
+        file, exerciseType, durationSec,
+        onProgress: setUploadProgress,
+      });
       navigate(`/tasks/${resp.videoId}`);
     } catch (err) {
       setError(err.message || "上传失败");
-    } finally {
       setLoading(false);
     }
   }
@@ -84,13 +103,16 @@ export default function UploadPage() {
           </div>
           <div className="guide-item">
             <span className="guide-icon">&#9202;</span>
-            <span>单次动作 15 秒以内为佳</span>
+            <span>单次动作 {MAX_VIDEO_DURATION_SEC} 秒以内为佳</span>
           </div>
           <div className="guide-item">
             <span className="guide-icon">&#9654;</span>
             <span>{selectedOption?.tip || "根据动作类型选择拍摄角度"}</span>
           </div>
         </div>
+        <p style={{ fontSize: 11, color: "var(--text-3)", marginTop: 10 }}>
+          建议 720p 或 1080p，文件不超过 {MAX_VIDEO_SIZE_MB}MB
+        </p>
       </div>
 
       {/* Upload + Preview */}
@@ -107,7 +129,7 @@ export default function UploadPage() {
               <>
                 <div className="drop-zone-icon">&#11014;</div>
                 <p style={{ fontWeight: 600, fontSize: 15 }}>拖拽视频到此处或点击选择</p>
-                <p style={{ fontSize: 12, color: "var(--text-2)" }}>支持 MP4、AVI、MOV</p>
+                <p style={{ fontSize: 12, color: "var(--text-2)" }}>支持 MP4、AVI、MOV，最大 {MAX_VIDEO_SIZE_MB}MB</p>
               </>
             ) : (
               <div className="file-preview" onClick={(e) => e.stopPropagation()}>
@@ -118,7 +140,8 @@ export default function UploadPage() {
                     <span className="file-preview-stat-sep"></span>
                     <span className={durationOk ? "" : "file-duration-over"}>{formatDuration(durationSec)}</span>
                   </div>
-                  {!durationOk && <p className="error" style={{ marginTop: 4 }}>视频超过 15 秒限制，请裁剪后再上传</p>}
+                  {!durationOk && <p className="error" style={{ marginTop: 4 }}>视频超过 {MAX_VIDEO_DURATION_SEC} 秒限制，请裁剪后再上传</p>}
+                  {!sizeOk && <p className="error" style={{ marginTop: 4 }}>文件超过 {MAX_VIDEO_SIZE_MB}MB 限制</p>}
                   <button type="button" className="ghost btn-sm" style={{ marginTop: 8 }}
                     onClick={(e) => { e.stopPropagation(); setFile(null); setDurationSec(null); }}>
                     移除文件
@@ -151,8 +174,18 @@ export default function UploadPage() {
           )}
 
           {error && <p className="error" style={{ marginTop: 8 }}>{error}</p>}
-          <button disabled={loading || !durationOk} style={{ marginTop: 14 }}>
-            {loading ? "上传中..." : "开始分析"}
+
+          {loading && (
+            <div className="upload-progress">
+              <div className="upload-progress-bar" style={{ width: `${uploadProgress}%` }} />
+              <span style={{ display: "block", marginTop: 6, fontSize: 12, color: "var(--text-2)", fontFamily: "var(--font-mono)" }}>
+                {uploadProgress > 0 ? `上传中 ${uploadProgress}%` : "准备上传..."}
+              </span>
+            </div>
+          )}
+
+          <button disabled={!canSubmit} style={{ marginTop: 14 }}>
+            {loading ? (uploadProgress > 0 ? `上传中 ${uploadProgress}%` : "上传中...") : "开始分析"}
           </button>
         </form>
       </div>
