@@ -98,3 +98,8 @@ scripts/start_cos_command.md
 
 # Claude Code plugin docs
 docs/superpowers/
+
+# Skill installations
+.agents/
+.github/skills/
+skills-lock.json
