@@ -13,6 +13,29 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path $PSScriptRoot -Parent
+$RunDir = Join-Path $RepoRoot ".run"
+New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
+
+function Save-Pid([string]$Name, [int]$Id) {
+    Set-Content -Path (Join-Path $RunDir "$Name.pid") -Value $Id
+}
+
+function Start-ManagedProcess([string]$Name, [string]$FilePath, [string[]]$ArgumentList, [string]$WorkingDirectory) {
+    $outLog = Join-Path $RunDir "$Name.out.log"
+    $errLog = Join-Path $RunDir "$Name.err.log"
+    $p = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -WorkingDirectory $WorkingDirectory -RedirectStandardOutput $outLog -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
+    Save-Pid $Name $p.Id
+    Write-Host "$Name started (PID=$($p.Id))." -ForegroundColor Green
+}
+
+function Test-HttpOk([string]$Url) {
+    try {
+        $resp = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 2
+        return $resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500
+    } catch {
+        return $false
+    }
+}
 
 # ── Secrets (set your keys here, or pass via env vars) ──────────────────
 $CosRegion     = "ap-guangzhou"
@@ -60,13 +83,11 @@ if (-not $SkipAi) {
     if (-not (Test-Path $aiDir)) {
         Write-Host "ai-service/ not found. Skip." -ForegroundColor Yellow
     } else {
-        $existing = Get-Process -Name "python" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -match "uvicorn" -or $_.CommandLine -match "uvicorn" }
-        if ($null -eq $existing) {
+        if (-not (Test-HttpOk "http://127.0.0.1:8000/health")) {
             $mediaBaseDir = Join-Path $RepoRoot "uploaded-videos\output"
             New-Item -ItemType Directory -Force -Path $mediaBaseDir | Out-Null
             New-Item -ItemType Directory -Force -Path (Join-Path $aiDir ".mplconfig") | Out-Null
-            Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "set MPLCONFIGDIR=$aiDir\.mplconfig && set AI_MEDIA_BASE_DIR=$mediaBaseDir && python -m uvicorn app.main:app --host 127.0.0.1 --port 8000" -WorkingDirectory $aiDir -WindowStyle Minimized
-            Write-Host "AI service starting on :8000" -ForegroundColor Green
+            Start-ManagedProcess "ai" "cmd.exe" @("/c", "set MPLCONFIGDIR=$aiDir\.mplconfig && set AI_MEDIA_BASE_DIR=$mediaBaseDir && python -m uvicorn app.main:app --host 127.0.0.1 --port 8000") $aiDir
         } else {
             Write-Host "AI service already running." -ForegroundColor Green
         }
@@ -79,6 +100,7 @@ $mediaOutputDir = Join-Path $RepoRoot "uploaded-videos\output"
 $backendEnv = @(
     "set DEV_DB_PASSWORD=$DbPassword",
     "set APP_MEDIA_BASE_DIR=$mediaOutputDir",
+    "set DEV_MEDIA_BASE_DIR=$mediaOutputDir",
     "set APP_REDIS_CACHE_ENABLED=true",
     "set APP_REDIS_HOST=127.0.0.1",
     "set APP_REDIS_PORT=6379",
@@ -102,8 +124,7 @@ if (-not [string]::IsNullOrWhiteSpace($LlmApiKey)) {
 }
 
 $envChain = ($backendEnv -join " && ") + " && mvn -q -DskipTests spring-boot:run"
-Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $envChain -WorkingDirectory $RepoRoot -WindowStyle Minimized
-Write-Host "Backend starting on :8080" -ForegroundColor Green
+Start-ManagedProcess "backend" "cmd.exe" @("/c", $envChain) $RepoRoot
 
 # ── 5) Start frontend ───────────────────────────────────────────────────
 if (-not $SkipFrontend) {
@@ -114,8 +135,7 @@ if (-not $SkipFrontend) {
         Push-Location $frontendDir
         try { & cmd.exe /c "npm install" | Out-Host } finally { Pop-Location }
     }
-    Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "npm run dev -- --host 0.0.0.0 --port 5173" -WorkingDirectory $frontendDir -WindowStyle Minimized
-    Write-Host "Frontend starting on :5173" -ForegroundColor Green
+    Start-ManagedProcess "frontend" "cmd.exe" @("/c", "npm run dev -- --host 0.0.0.0 --port 5173") $frontendDir
 }
 
 Write-Host "`n=== Done ===" -ForegroundColor Green

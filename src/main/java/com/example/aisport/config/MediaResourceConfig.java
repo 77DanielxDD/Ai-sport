@@ -7,6 +7,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -19,13 +21,21 @@ public class MediaResourceConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        Path absolute = Paths.get(mediaBaseDir).toAbsolutePath().normalize();
-        String location = absolute.toUri().toString();
-        if (!location.endsWith("/")) {
-            location = location + "/";
-        }
-        log.info("Serving media resources: /media/** -> {}", location);
+        Set<String> locations = new LinkedHashSet<>();
+        addLocation(locations, mediaBaseDir);
+        addLocation(locations, "./uploaded-videos/output");
+        addLocation(locations, "./ai-service/uploaded-videos/output");
+
+        log.info("Serving media resources: /media/** -> {}", locations);
         registry.addResourceHandler("/media/**")
-                .addResourceLocations(location);
+                .addResourceLocations(locations.toArray(String[]::new));
+    }
+
+    private void addLocation(Set<String> locations, String dir) {
+        if (dir == null || dir.isBlank()) {
+            return;
+        }
+        String location = Paths.get(dir).toAbsolutePath().normalize().toUri().toString();
+        locations.add(location.endsWith("/") ? location : location + "/");
     }
 }
