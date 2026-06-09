@@ -43,18 +43,57 @@ function MetricCell({ score, level }) {
   );
 }
 
+function loadQaHistory(videoId) {
+  try {
+    const raw = localStorage.getItem(`ai_sport_qa_${videoId}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveQaHistory(videoId, history) {
+  try {
+    // Keep last 20 entries, max 2 KB per entry approximated
+    const trimmed = history.slice(0, 20);
+    localStorage.setItem(`ai_sport_qa_${videoId}`, JSON.stringify(trimmed));
+  } catch { /* storage full, ignore */ }
+}
+
 export default function ReportPage() {
   const { videoId } = useParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [qaQuestion, setQaQuestion] = useState("");
-  const [qaHistory, setQaHistory] = useState([]); // {q, answer, error, time}
+  const [qaHistory, setQaHistory] = useState(() => loadQaHistory(videoId));
   const [qaLoading, setQaLoading] = useState(false);
   const [qaError, setQaError] = useState("");
   const [qaExpandedIdx, setQaExpandedIdx] = useState(null);
   const [activeRepIdx, setActiveRepIdx] = useState(null);
   const [modalIndex, setModalIndex] = useState(null);
+
+  // Persist history to localStorage whenever it changes or videoId changes
+  useEffect(() => {
+    setQaHistory(loadQaHistory(videoId));
+    setQaExpandedIdx(null);
+  }, [videoId]);
+
+  useEffect(() => {
+    saveQaHistory(videoId, qaHistory);
+  }, [qaHistory, videoId]);
+
+  function updateHistory(entry) {
+    setQaHistory((prev) => {
+      const next = [entry, ...prev];
+      saveQaHistory(videoId, next);
+      return next;
+    });
+  }
+
+  function clearHistory() {
+    setQaHistory([]);
+    setQaExpandedIdx(null);
+    try { localStorage.removeItem(`ai_sport_qa_${videoId}`); } catch {}
+  }
 
   async function submitQa(e) {
     e.preventDefault();
@@ -63,11 +102,11 @@ export default function ReportPage() {
     setQaError(""); setQaLoading(true);
     try {
       const resp = await askAgent(q, Number(videoId));
-      setQaHistory((prev) => [{ q, answer: resp, error: null, time: Date.now() }, ...prev]);
+      updateHistory({ q, answer: resp, error: null, time: Date.now() });
       setQaQuestion("");
     } catch (err) {
       const errMsg = err?.body?.error || err.message || "请求失败";
-      setQaHistory((prev) => [{ q, answer: null, error: errMsg, time: Date.now() }, ...prev]);
+      updateHistory({ q, answer: null, error: errMsg, time: Date.now() });
     } finally {
       setQaLoading(false);
     }
@@ -339,9 +378,19 @@ export default function ReportPage() {
             {/* Q&A History */}
             {qaHistory.length > 0 && (
               <div style={{ marginTop: 20, borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-                <h4 style={{ fontSize: 14, marginBottom: 12, color: "var(--text-2)" }}>
-                  提问记录 ({qaHistory.length})
-                </h4>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <h4 style={{ fontSize: 14, color: "var(--text-2)", margin: 0 }}>
+                    提问记录 ({qaHistory.length})
+                  </h4>
+                  <button type="button"
+                    onClick={() => { if (window.confirm("清空所有提问记录？")) clearHistory(); }}
+                    style={{
+                      fontSize: 11, padding: "3px 10px", width: "auto",
+                      background: "transparent", color: "var(--text-3)", border: "1px solid var(--border)",
+                      borderRadius: "var(--radius-xs)", cursor: "pointer",
+                    }}
+                  >清空记录</button>
+                </div>
                 {qaHistory.map((item, hi) => {
                   const isExpanded = qaExpandedIdx === hi;
                   return (
