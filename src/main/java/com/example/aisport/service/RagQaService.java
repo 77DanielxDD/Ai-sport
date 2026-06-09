@@ -90,13 +90,10 @@ public class RagQaService {
         String rewriteCacheKey = buildRewriteCacheKey(question);
         Optional<String> cachedRewrite = queryCacheService.get(rewriteCacheKey);
 
-        RetrievalQuery rq;
+        RetrievalQuery rq = queryRewriter.rewrite(question, buildProfileMap(profile));
         if (cachedRewrite.isPresent()) {
-            // Just parse the route from cached rewrite
-            rq = queryRewriter.rewrite(question, buildProfileMap(profile));
+            rq.setRewrittenQuery(cachedRewrite.get());
         } else {
-            rq = queryRewriter.rewrite(question, buildProfileMap(profile));
-            // Cache the rewritten query hash
             queryCacheService.put(rewriteCacheKey, rq.effectiveQuery(), Duration.ofMinutes(10));
         }
 
@@ -149,9 +146,11 @@ public class RagQaService {
     }
 
     private String buildRetrievalCacheKey(UserTrainingProfile profile, String query) {
-        String userPart = profile.exerciseTypes.isEmpty() ? "new" : String.join(",", profile.exerciseTypes).hashCode() + "";
+        String videoPart = profile.focusVideo == null ? "latest" : String.valueOf(profile.focusVideo.getId());
+        String typePart = Integer.toHexString(String.join(",", profile.exerciseTypes).hashCode());
+        String issuePart = Integer.toHexString(String.join("|", profile.issues).hashCode());
         String qHash = Integer.toHexString(query.toLowerCase(Locale.ROOT).hashCode());
-        return "rag:retrieval:" + userPart + ":" + qHash;
+        return "rag:retrieval:" + videoPart + ":" + typePart + ":" + issuePart + ":" + qHash;
     }
 
     private Map<String, Object> buildProfileMap(UserTrainingProfile profile) {
