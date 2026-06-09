@@ -2,8 +2,9 @@ package com.example.aisport.agent.tools;
 
 import com.example.aisport.agent.AgentContext;
 import com.example.aisport.agent.AgentTool;
-import com.example.aisport.rag.VectorDocument;
-import com.example.aisport.rag.VectorSearchService;
+import com.example.aisport.rag.*;
+import com.example.aisport.rag.pipeline.HybridRetriever;
+import com.example.aisport.rag.pipeline.QueryRewriter;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -12,9 +13,15 @@ import java.util.*;
 public class KnowledgeSearchTool implements AgentTool {
 
     private final VectorSearchService vectorSearchService;
+    private final HybridRetriever hybridRetriever;
+    private final QueryRewriter queryRewriter;
 
-    public KnowledgeSearchTool(VectorSearchService vectorSearchService) {
+    public KnowledgeSearchTool(VectorSearchService vectorSearchService,
+                                HybridRetriever hybridRetriever,
+                                QueryRewriter queryRewriter) {
         this.vectorSearchService = vectorSearchService;
+        this.hybridRetriever = hybridRetriever;
+        this.queryRewriter = queryRewriter;
     }
 
     @Override
@@ -22,7 +29,7 @@ public class KnowledgeSearchTool implements AgentTool {
 
     @Override
     public String description() {
-        return "Search the fitness knowledge base using semantic vector search. "
+        return "Search the fitness knowledge base using hybrid (vector + keyword) search. "
              + "Covers exercise form, corrective strategies, training principles, and common mistakes. "
              + "Use this to get evidence-based training advice for specific exercises or issues.";
     }
@@ -57,15 +64,23 @@ public class KnowledgeSearchTool implements AgentTool {
         int topK = args.get("topK") instanceof Number n ? Math.min(n.intValue(), 5) : 3;
 
         try {
-            List<VectorDocument> results = vectorSearchService.search(query, topK);
+            // Build RetrievalQuery from context + args
+            RetrievalQuery rq = queryRewriter.rewrite(query, Map.of());
+            rq.setTopK(topK);
+            rq.setTypeFilter("knowledge");
+
+            List<RetrievalResult> results = vectorSearchService.hybridSearch(rq);
 
             List<Map<String, Object>> docs = new ArrayList<>();
-            for (VectorDocument doc : results) {
+            for (RetrievalResult r : results) {
                 Map<String, Object> item = new LinkedHashMap<>();
-                item.put("id", doc.getId());
-                item.put("title", doc.getTitle());
-                item.put("content", doc.getContent());
-                item.put("source", doc.getSource());
+                item.put("id", r.chunkId());
+                item.put("title", r.title());
+                item.put("content", r.getDocument() != null ? r.getDocument().getContent() : "");
+                item.put("source", r.source());
+                item.put("score", Math.round(r.getFinalScore() * 1000.0) / 1000.0);
+                item.put("matchedBy", r.getMatchedBy());
+                item.put("chunkId", r.chunkId());
                 docs.add(item);
             }
 

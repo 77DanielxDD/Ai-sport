@@ -2,26 +2,16 @@ package com.example.aisport.service;
 
 import com.example.aisport.entity.ExerciseVideo;
 import com.example.aisport.entity.User;
+import com.example.aisport.rag.*;
+import com.example.aisport.rag.pipeline.*;
 import com.example.aisport.repository.ExerciseVideoRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StreamUtils;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 @Service
 public class RagQaService {
@@ -29,14 +19,29 @@ public class RagQaService {
     private final ExerciseVideoRepository videoRepository;
     private final UserService userService;
     private final QueryCacheService queryCacheService;
+    private final QueryRewriter queryRewriter;
+    private final HybridRetriever hybridRetriever;
+    private final Reranker reranker;
+    private final ContextAssembler contextAssembler;
+    private final RetrievalConfidenceEvaluator confidenceEvaluator;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public RagQaService(ExerciseVideoRepository videoRepository,
                         UserService userService,
-                        QueryCacheService queryCacheService) {
+                        QueryCacheService queryCacheService,
+                        QueryRewriter queryRewriter,
+                        HybridRetriever hybridRetriever,
+                        Reranker reranker,
+                        ContextAssembler contextAssembler,
+                        RetrievalConfidenceEvaluator confidenceEvaluator) {
         this.videoRepository = videoRepository;
         this.userService = userService;
         this.queryCacheService = queryCacheService;
+        this.queryRewriter = queryRewriter;
+        this.hybridRetriever = hybridRetriever;
+        this.reranker = reranker;
+        this.contextAssembler = contextAssembler;
+        this.confidenceEvaluator = confidenceEvaluator;
     }
 
     public String buildPersonalizedAnswer(String username, Long focusVideoId, String question) {
@@ -45,10 +50,11 @@ public class RagQaService {
             throw new IllegalArgumentException("question is required");
         }
 
-        String cacheKey = buildAnswerCacheKey(username, focusVideoId, q);
-        Optional<String> cached = queryCacheService.get(cacheKey);
-        if (cached.isPresent()) {
-            return cached.get();
+        // Check answer cache
+        String answerCacheKey = buildAnswerCacheKey(username, focusVideoId, q);
+        Optional<String> cachedAnswer = queryCacheService.get(answerCacheKey);
+        if (cachedAnswer.isPresent()) {
+            return cachedAnswer.get();
         }
 
         User user = userService.findByUsername(username)
@@ -70,18 +76,96 @@ public class RagQaService {
         }
 
         UserTrainingProfile profile = summarizeUserProfile(recent, focus);
-        List<String> retrievedKnowledge = retrieveKnowledge(q, profile);
-        String answer = composeAnswer(q, profile, retrievedKnowledge);
 
-        queryCacheService.put(cacheKey, answer, Duration.ofMinutes(2));
+        // Pipeline: rewrite -> retrieve -> rerank -> confidence check -> assemble
+        List<RetrievedContext> contexts = retrieveWithPipeline(q, profile);
+        String answer = composeAnswer(q, profile, contexts);
+
+        queryCacheService.put(answerCacheKey, answer, Duration.ofMinutes(2));
         return answer;
+    }
+
+    private List<RetrievedContext> retrieveWithPipeline(String question, UserTrainingProfile profile) {
+        // Step 1: Query rewrite (with cache)
+        String rewriteCacheKey = buildRewriteCacheKey(question);
+        Optional<String> cachedRewrite = queryCacheService.get(rewriteCacheKey);
+
+        RetrievalQuery rq;
+        if (cachedRewrite.isPresent()) {
+            // Just parse the route from cached rewrite
+            rq = queryRewriter.rewrite(question, buildProfileMap(profile));
+        } else {
+            rq = queryRewriter.rewrite(question, buildProfileMap(profile));
+            // Cache the rewritten query hash
+            queryCacheService.put(rewriteCacheKey, rq.effectiveQuery(), Duration.ofMinutes(10));
+        }
+
+        // Step 2: Retrieve (with cache)
+        String retCacheKey = buildRetrievalCacheKey(profile, rq.effectiveQuery());
+        Optional<String> cachedRet = queryCacheService.get(retCacheKey);
+        List<RetrievalResult> results;
+
+        if (cachedRet.isPresent()) {
+            results = deserializeResults(cachedRet.get());
+        } else {
+            results = hybridRetriever.retrieve(rq);
+
+            // Step 3: Rerank
+            results = reranker.rerank(rq, results);
+
+            // Step 4: Low confidence -> second retrieval
+            if (confidenceEvaluator.lowConfidence(results)) {
+                List<RetrievalResult> expanded = hybridRetriever.retrieveExpanded(rq);
+                // Merge and deduplicate
+                Map<String, RetrievalResult> merged = new LinkedHashMap<>();
+                for (RetrievalResult r : results) {
+                    if (r.chunkId() != null) merged.put(r.chunkId(), r);
+                }
+                for (RetrievalResult r : expanded) {
+                    if (r.chunkId() != null) merged.putIfAbsent(r.chunkId(), r);
+                }
+                results = new ArrayList<>(merged.values());
+                results = reranker.rerank(rq, results);
+            }
+
+            // Cache retrieval results
+            queryCacheService.put(retCacheKey, serializeResults(results), Duration.ofMinutes(3));
+        }
+
+        // Step 5: Context assembly
+        return contextAssembler.assemble(rq, results);
     }
 
     private String buildAnswerCacheKey(String username, Long focusVideoId, String question) {
         String userKey = username == null ? "anonymous" : username.trim().toLowerCase(Locale.ROOT);
         String videoKey = focusVideoId == null ? "latest" : String.valueOf(focusVideoId);
-        String questionKey = Integer.toHexString(question.toLowerCase(Locale.ROOT).hashCode());
-        return "rag:answer:" + userKey + ":" + videoKey + ":" + questionKey;
+        String questionHash = Integer.toHexString(question.toLowerCase(Locale.ROOT).hashCode());
+        return "rag:answer:" + userKey + ":" + videoKey + ":" + questionHash;
+    }
+
+    private String buildRewriteCacheKey(String question) {
+        String qHash = Integer.toHexString(question.toLowerCase(Locale.ROOT).hashCode());
+        return "rag:rewrite:" + qHash;
+    }
+
+    private String buildRetrievalCacheKey(UserTrainingProfile profile, String query) {
+        String userPart = profile.exerciseTypes.isEmpty() ? "new" : String.join(",", profile.exerciseTypes).hashCode() + "";
+        String qHash = Integer.toHexString(query.toLowerCase(Locale.ROOT).hashCode());
+        return "rag:retrieval:" + userPart + ":" + qHash;
+    }
+
+    private Map<String, Object> buildProfileMap(UserTrainingProfile profile) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("recentCount", profile.recentCount);
+        map.put("completedCount", profile.completedCount);
+        map.put("failedCount", profile.failedCount);
+        map.put("exerciseTypes", profile.exerciseTypes);
+        map.put("issues", profile.issues);
+        if (profile.focusVideo != null) {
+            map.put("focusVideoId", profile.focusVideo.getId());
+            map.put("focusExerciseType", profile.focusVideo.getExerciseType());
+        }
+        return map;
     }
 
     private UserTrainingProfile summarizeUserProfile(List<ExerciseVideo> recent, ExerciseVideo focus) {
@@ -133,41 +217,7 @@ public class RagQaService {
         return profile;
     }
 
-    private List<String> retrieveKnowledge(String question, UserTrainingProfile profile) {
-        List<String> chunks = loadKnowledgeChunks();
-        if (chunks.isEmpty()) {
-            return List.of();
-        }
-
-        Set<String> keywords = new LinkedHashSet<>(extractKeywords(question));
-        for (String type : profile.exerciseTypes) {
-            keywords.add(type.toLowerCase(Locale.ROOT));
-        }
-        for (String issue : profile.issues) {
-            keywords.addAll(extractKeywords(issue));
-        }
-
-        List<Map.Entry<String, Integer>> scored = new ArrayList<>();
-        for (String chunk : chunks) {
-            int score = 0;
-            String lower = chunk.toLowerCase(Locale.ROOT);
-            for (String keyword : keywords) {
-                if (keyword.length() >= 2 && lower.contains(keyword)) {
-                    score += 2;
-                }
-            }
-            score += Math.min(2, lower.length() / 300);
-            scored.add(Map.entry(chunk, score));
-        }
-
-        return scored.stream()
-                .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue()))
-                .limit(3)
-                .map(Map.Entry::getKey)
-                .toList();
-    }
-
-    private String composeAnswer(String question, UserTrainingProfile profile, List<String> knowledge) {
+    private String composeAnswer(String question, UserTrainingProfile profile, List<RetrievedContext> contexts) {
         StringBuilder sb = new StringBuilder();
         sb.append("Question: ").append(question).append("\n\n");
         sb.append("Personalized summary:\n");
@@ -209,10 +259,14 @@ public class RagQaService {
         sb.append("- Day 5-6: maintain load and add one review set.\n");
         sb.append("- Day 7: deload + mobility + weekly review.\n");
 
-        if (!knowledge.isEmpty()) {
-            sb.append("\nKnowledge references:\n");
-            for (String chunk : knowledge) {
-                sb.append("- ").append(shortText(chunk.replace("\n", " "), 140)).append("\n");
+        if (!contexts.isEmpty()) {
+            sb.append("\nReference sources:\n");
+            for (int i = 0; i < contexts.size(); i++) {
+                RetrievedContext ctx = contexts.get(i);
+                sb.append("[").append(i + 1).append("] ")
+                        .append(ctx.getTitle())
+                        .append(" - ").append(ctx.referenceLabel()).append("\n");
+                sb.append("    ").append(ctx.getSnippet()).append("\n");
             }
         }
 
@@ -234,44 +288,6 @@ public class RagQaService {
                 return Map.of();
             }
         }
-    }
-
-    private List<String> loadKnowledgeChunks() {
-        try {
-            ClassPathResource resource = new ClassPathResource("rag/fitness_knowledge_zh.txt");
-            if (!resource.exists()) {
-                return List.of();
-            }
-            String content = StreamUtils.copyToString(resource.getInputStream(), StandardCharsets.UTF_8);
-            String[] arr = content.split("\\r?\\n\\r?\\n");
-            List<String> out = new ArrayList<>();
-            for (String s : arr) {
-                String text = s.trim();
-                if (!text.isBlank()) {
-                    out.add(text);
-                }
-            }
-            return out;
-        } catch (IOException e) {
-            return List.of();
-        }
-    }
-
-    private List<String> extractKeywords(String text) {
-        if (text == null || text.isBlank()) {
-            return List.of();
-        }
-        String normalized = text.toLowerCase(Locale.ROOT)
-                .replace("_", " ")
-                .replace("-", " ");
-        String[] parts = normalized.split("[^a-z0-9\\u4e00-\\u9fa5]+");
-        List<String> out = new ArrayList<>();
-        for (String part : parts) {
-            if (part.length() >= 2) {
-                out.add(part);
-            }
-        }
-        return out;
     }
 
     private List<String> extractTipsText(Map<String, Object> analysis, int limit) {
@@ -336,6 +352,23 @@ public class RagQaService {
             return text;
         }
         return text.substring(0, Math.max(0, max - 1)) + "...";
+    }
+
+    private String serializeResults(List<RetrievalResult> results) {
+        try {
+            return objectMapper.writeValueAsString(results);
+        } catch (Exception e) {
+            return "[]";
+        }
+    }
+
+    private List<RetrievalResult> deserializeResults(String json) {
+        try {
+            return objectMapper.readValue(json,
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, RetrievalResult.class));
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     private static class UserTrainingProfile {

@@ -30,18 +30,24 @@ public class KnowledgeAdminController {
     public ResponseEntity<?> reindex() {
         long start = System.currentTimeMillis();
         try {
-            ingestionService.reindex();
+            KnowledgeIngestionService.ReindexResult result = ingestionService.reindex();
             List<VectorDocument> docs = ingestionService.listAll();
             long elapsed = System.currentTimeMillis() - start;
 
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("status", "ok");
-            result.put("chunkCount", docs.size());
-            result.put("durationMs", elapsed);
-            result.put("indexedAt", LocalDateTime.now().toString());
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("status", "ok");
+            body.put("chunkCount", docs.size());
+            body.put("added", result.getAdded());
+            body.put("updated", result.getUpdated());
+            body.put("deleted", result.getDeleted());
+            body.put("skipped", result.getSkipped());
+            body.put("sourceHash", result.getSourceHash());
+            body.put("durationMs", elapsed);
+            body.put("indexedAt", LocalDateTime.now().toString());
 
-            log.info("Knowledge reindex complete: {} chunks in {}ms", docs.size(), elapsed);
-            return ResponseEntity.ok(result);
+            log.info("Knowledge reindex complete: {} chunks, added={}, updated={}, deleted={}, skipped={} in {}ms",
+                    docs.size(), result.getAdded(), result.getUpdated(), result.getDeleted(), result.getSkipped(), elapsed);
+            return ResponseEntity.ok(body);
         } catch (Exception e) {
             log.error("Knowledge reindex failed", e);
             return ResponseEntity.internalServerError().body(Map.of(

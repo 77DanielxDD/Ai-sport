@@ -18,7 +18,7 @@ class VectorSearchServiceTest {
     void setUp() {
         embeddingClient = new SimpleEmbeddingClient();
         vectorStore = new InMemoryVectorStore();
-        searchService = new VectorSearchService(embeddingClient, vectorStore);
+        searchService = new VectorSearchService(embeddingClient, vectorStore, null);
 
         List<VectorDocument> docs = List.of(
                 doc("k1", "knowledge", "深蹲深度不足的纠正", "深蹲深度不足的纠正原则：先降低负重，优先保证动作幅度。"),
@@ -72,9 +72,39 @@ class VectorSearchServiceTest {
     @Test
     void shouldHandleEmptyStore() {
         InMemoryVectorStore emptyStore = new InMemoryVectorStore();
-        VectorSearchService emptySearch = new VectorSearchService(embeddingClient, emptyStore);
+        VectorSearchService emptySearch = new VectorSearchService(embeddingClient, emptyStore, null);
         List<VectorDocument> results = emptySearch.search("深蹲", 5);
         assertTrue(results.isEmpty());
+    }
+
+    @Test
+    void shouldHybridSearchFallbackToDense() {
+        RetrievalQuery rq = new RetrievalQuery();
+        rq.setOriginalQuery("深蹲深度不够怎么办");
+        rq.setRewrittenQuery("深蹲深度不够怎么办");
+        rq.setTopK(3);
+        rq.setTypeFilter("knowledge");
+
+        List<RetrievalResult> results = searchService.hybridSearch(rq);
+        assertFalse(results.isEmpty());
+        assertTrue(results.size() <= 3);
+        // Should be matched by vector since keyword index not available
+        assertTrue(results.stream().anyMatch(r -> "vector".equals(r.getMatchedBy())));
+    }
+
+    @Test
+    void shouldReturnScoredResults() {
+        List<ScoredVectorDocument> results = searchService.searchScored("深蹲深度不够怎么办", "knowledge", 3);
+        assertFalse(results.isEmpty());
+        assertTrue(results.size() <= 3);
+        assertTrue(results.get(0).getVectorScore() > 0, "Top result should have positive score");
+    }
+
+    @Test
+    void shouldNotLoseTypeFilterInScoredSearch() {
+        List<ScoredVectorDocument> results = searchService.searchScored("俯卧撑", "knowledge", 5);
+        assertFalse(results.isEmpty());
+        assertTrue(results.stream().allMatch(r -> "knowledge".equals(r.getDocument().getType())));
     }
 
     private VectorDocument doc(String id, String type, String title, String content) {
