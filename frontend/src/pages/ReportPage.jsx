@@ -46,6 +46,7 @@ function MetricCell({ score, level }) {
 export default function ReportPage() {
   const { videoId } = useParams();
   const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [qaQuestion, setQaQuestion] = useState("");
   const [qaAnswer, setQaAnswer] = useState(null);
@@ -62,7 +63,7 @@ export default function ReportPage() {
       const resp = await askAgent(qaQuestion, Number(videoId));
       setQaAnswer(resp);
     } catch (err) {
-      setQaError(err?.body?.error || err.message || "failed");
+      setQaError(err?.body?.error || err.message || "请求失败");
     } finally {
       setQaLoading(false);
     }
@@ -71,27 +72,26 @@ export default function ReportPage() {
   function usePreset(q) { setQaQuestion(q); setQaAnswer(null); setQaError(""); }
 
   useEffect(() => {
-    getVideoAnalysis(videoId).then(setData).catch((e) => setError(e.body?.message || e.body?.error || e.message));
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    setData(null);
+    getVideoAnalysis(videoId)
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((e) => {
+        if (!cancelled) {
+          const msg = (e.body && typeof e.body === "object")
+            ? (e.body.message || e.body.error || e.message)
+            : (e.message || "加载报告失败");
+          setError(msg);
+        }
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [videoId]);
 
-  useEffect(() => {
-    if (modalIndex == null || reportImages.length === 0) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e) => {
-      if (e.key === "Escape") { setModalIndex(null); return; }
-      if (e.key === "ArrowLeft") { setModalIndex((p) => (p > 0 ? p - 1 : reportImages.length - 1)); return; }
-      if (e.key === "ArrowRight") { setModalIndex((p) => (p < reportImages.length - 1 ? p + 1 : 0)); return; }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = prev;
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [modalIndex, reportImages.length]);
-
   const analysis = useMemo(() => data?.analysis || {}, [data]);
-  const reportImages = analysis.report_images || [];
+  const reportImages = useMemo(() => analysis.report_images || [], [analysis.report_images]);
   const tips = analysis.tips || [];
   const repEvaluations = analysis.repEvaluations || [];
   const hasRichEvals = repEvaluations.length > 0;
@@ -101,6 +101,23 @@ export default function ReportPage() {
   const exerciseType = analysis.exercise_type || analysis.exerciseType;
   const repCount = analysis.rep_count ?? "-";
   const processMs = analysis.processing_time_ms ?? "-";
+
+  useEffect(() => {
+    if (modalIndex == null || reportImages.length === 0) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const len = reportImages.length;
+    const onKey = (e) => {
+      if (e.key === "Escape") { setModalIndex(null); return; }
+      if (e.key === "ArrowLeft") { setModalIndex((p) => (p > 0 ? p - 1 : len - 1)); return; }
+      if (e.key === "ArrowRight") { setModalIndex((p) => (p < len - 1 ? p + 1 : 0)); return; }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [modalIndex, reportImages]);
 
   const linePoints = useMemo(() => {
     return tips.filter((t) => typeof t.rep_index !== "undefined")
@@ -137,9 +154,10 @@ export default function ReportPage() {
     <div>
       <h1>分析报告 #{videoId}</h1>
       {error && <p className="error">{error}</p>}
-      {!data && !error && <p style={{ color: "var(--text-2)" }}>报告加载中...</p>}
+      {loading && <p style={{ color: "var(--text-2)" }}>报告加载中...</p>}
+      {!loading && !error && !data && <p style={{ color: "var(--text-2)" }}>暂无报告数据</p>}
 
-      {data && (
+      {data && !loading && (
         <>
           {/* Zone 1: Summary Header */}
           <div className="report-summary fade-in" style={{ marginBottom: 20 }}>

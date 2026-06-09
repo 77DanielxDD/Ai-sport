@@ -131,7 +131,11 @@ export default function DashboardPage() {
                   <td>{v.id}</td>
                   <td>{exerciseTypeLabel(v.exerciseType)}</td>
                   <td><StatusPill status={v.status} /></td>
-                  <td><Link to={`/reports/${v.id}`}>查看报告</Link></td>
+                  <td>
+                    {v.status === "COMPLETED"
+                      ? <Link to={`/reports/${v.id}`}>查看报告</Link>
+                      : <Link to={`/tasks/${v.id}`}>查看进度</Link>}
+                  </td>
                 </tr>
               ))}
           </tbody>

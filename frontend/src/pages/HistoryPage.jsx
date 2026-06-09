@@ -82,7 +82,11 @@ export default function HistoryPage() {
                   <td style={{ fontSize: 12, color: "var(--text-2)" }}>{v.uploadedAt || "-"}</td>
                   <td>
                     <div className="inline-actions">
-                      <Link to={`/reports/${v.id}`}>报告</Link>
+                      {v.status === "COMPLETED" ? (
+                        <Link to={`/reports/${v.id}`}>报告</Link>
+                      ) : (
+                        <span style={{ color: "var(--text-3)", fontSize: 12 }}>报告</span>
+                      )}
                       <Link to={`/tasks/${v.id}`}>任务</Link>
                       <button type="button" className="danger-btn" disabled={deletingId === v.id} onClick={() => handleDelete(v.id)}>
                         {deletingId === v.id ? "..." : "删"}
