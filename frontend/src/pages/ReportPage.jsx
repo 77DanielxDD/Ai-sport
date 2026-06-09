@@ -49,27 +49,31 @@ export default function ReportPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [qaQuestion, setQaQuestion] = useState("");
-  const [qaAnswer, setQaAnswer] = useState(null);
+  const [qaHistory, setQaHistory] = useState([]); // {q, answer, error, time}
   const [qaLoading, setQaLoading] = useState(false);
   const [qaError, setQaError] = useState("");
+  const [qaExpandedIdx, setQaExpandedIdx] = useState(null);
   const [activeRepIdx, setActiveRepIdx] = useState(null);
   const [modalIndex, setModalIndex] = useState(null);
 
   async function submitQa(e) {
     e.preventDefault();
     if (!qaQuestion.trim()) return;
-    setQaError(""); setQaAnswer(null); setQaLoading(true);
+    const q = qaQuestion.trim();
+    setQaError(""); setQaLoading(true);
     try {
-      const resp = await askAgent(qaQuestion, Number(videoId));
-      setQaAnswer(resp);
+      const resp = await askAgent(q, Number(videoId));
+      setQaHistory((prev) => [{ q, answer: resp, error: null, time: Date.now() }, ...prev]);
+      setQaQuestion("");
     } catch (err) {
-      setQaError(err?.body?.error || err.message || "请求失败");
+      const errMsg = err?.body?.error || err.message || "请求失败";
+      setQaHistory((prev) => [{ q, answer: null, error: errMsg, time: Date.now() }, ...prev]);
     } finally {
       setQaLoading(false);
     }
   }
 
-  function usePreset(q) { setQaQuestion(q); setQaAnswer(null); setQaError(""); }
+  function usePreset(q) { setQaQuestion(q); setQaError(""); }
 
   useEffect(() => {
     let cancelled = false;
@@ -332,66 +336,123 @@ export default function ReportPage() {
 
             {qaLoading && <p style={{ marginTop: 12, color: "var(--text-2)", fontSize: 13 }}>Agent 正在调用工具分析...</p>}
 
-            {qaAnswer && (
-              <div style={{ marginTop: 16 }}>
-                {qaAnswer.toolCalls && qaAnswer.toolCalls.length > 0 && (
-                  <div style={{ marginBottom: 12, padding: 8, background: "var(--bg)", borderRadius: "var(--radius-sm)", fontSize: 12 }}>
-                    <div style={{ fontWeight: 600, marginBottom: 4, color: "var(--accent)" }}>工具调用</div>
-                    {qaAnswer.toolCalls.map((tc, i) => (
-                      <div key={i} style={{ marginBottom: 2 }}>
-                        {tc.success ? "✓" : "✗"} <code style={{ background: "var(--bg-2)", padding: "0 4px" }}>{tc.tool}</code> — {tc.summary} ({tc.durationMs}ms)
+            {/* Q&A History */}
+            {qaHistory.length > 0 && (
+              <div style={{ marginTop: 20, borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+                <h4 style={{ fontSize: 14, marginBottom: 12, color: "var(--text-2)" }}>
+                  提问记录 ({qaHistory.length})
+                </h4>
+                {qaHistory.map((item, hi) => {
+                  const isExpanded = qaExpandedIdx === hi;
+                  return (
+                    <div key={hi} style={{
+                      marginBottom: 12, border: "1px solid var(--border)",
+                      borderRadius: "var(--radius-sm)", overflow: "hidden",
+                    }}>
+                      {/* Collapsed header — always visible */}
+                      <div
+                        onClick={() => setQaExpandedIdx(isExpanded ? null : hi)}
+                        style={{
+                          padding: "8px 12px", cursor: "pointer",
+                          background: isExpanded ? "var(--accent-dim)" : "var(--bg)",
+                          display: "flex", justifyContent: "space-between", alignItems: "center",
+                          transition: "background 0.15s",
+                        }}
+                      >
+                        <span style={{ fontWeight: 600, fontSize: 13, color: "var(--text)" }}>
+                          {item.q}
+                        </span>
+                        <span style={{ fontSize: 11, color: "var(--text-3)", marginLeft: 12, whiteSpace: "nowrap" }}>
+                          {item.answer ? "已回复" : "失败"} · {new Date(item.time).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
+                          <span style={{ marginLeft: 6 }}>{isExpanded ? "▲" : "▼"}</span>
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                )}
-                {qaAnswer.summary && (
-                  <div style={{ padding: "10px 14px", background: "var(--accent)", color: "#fff", borderRadius: "var(--radius-sm)", marginBottom: 12, fontWeight: 500 }}>
-                    {qaAnswer.summary}
-                  </div>
-                )}
-                {qaAnswer.diagnosis && qaAnswer.diagnosis.length > 0 && (
-                  <div style={{ marginBottom: 12 }}>
-                    <h4 style={{ fontSize: 14, marginBottom: 6 }}>问题诊断</h4>
-                    {qaAnswer.diagnosis.map((d, i) => (
-                      <div key={i} style={{ marginBottom: 8, padding: "6px 10px", background: "var(--bg)", borderRadius: "var(--radius-sm)", fontSize: 13 }}>
-                        <span style={{ fontWeight: 600 }}>{d.issue}</span>
-                        <SeverityBadge severity={d.severity} />
-                        <div style={{ color: "var(--text-2)", marginTop: 2 }}>{d.evidence}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {qaAnswer.recommendations && qaAnswer.recommendations.length > 0 && (
-                  <div style={{ marginBottom: 12 }}>
-                    <h4 style={{ fontSize: 14, marginBottom: 6 }}>改进建议</h4>
-                    {qaAnswer.recommendations.map((r, i) => (
-                      <div key={i} style={{ marginBottom: 8, padding: "6px 10px", background: "var(--bg)", borderRadius: "var(--radius-sm)", fontSize: 13 }}>
-                        <span style={{ fontWeight: 600 }}>{r.title}</span>
-                        <PriorityBadge priority={r.priority} />
-                        <div style={{ color: "var(--text-2)", marginTop: 2 }}>{r.detail}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {qaAnswer.trainingPlan && qaAnswer.trainingPlan.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: 14, marginBottom: 6 }}>训练计划</h4>
-                    {qaAnswer.trainingPlan.map((p, i) => (
-                      <div key={i} style={{ marginBottom: 6, padding: "6px 10px", background: "var(--bg)", borderRadius: "var(--radius-sm)", fontSize: 13 }}>
-                        <span style={{ fontWeight: 700, color: "var(--accent)" }}>{p.day}</span>: {p.content}
-                        {p.focus && <span style={{ color: "var(--text-2)" }}> · {p.focus}</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {qaAnswer.references && qaAnswer.references.length > 0 && (
-                  <div style={{ marginTop: 12 }}>
-                    <h4 style={{ fontSize: 14, marginBottom: 6 }}>参考来源</h4>
-                    {qaAnswer.references.map((ref, i) => (
-                      <div key={i} style={{ fontSize: 12, marginBottom: 4, color: "var(--text-2)" }}>{ref.title}</div>
-                    ))}
-                  </div>
-                )}
+
+                      {/* Expanded detail */}
+                      {isExpanded && (
+                        <div style={{ padding: "10px 14px", borderTop: "1px solid var(--border)" }}>
+                          {item.error && <p className="error">{item.error}</p>}
+
+                          {item.answer && (
+                            <>
+                              {item.answer.toolCalls && item.answer.toolCalls.length > 0 && (
+                                <div style={{ marginBottom: 10, padding: 8, background: "var(--bg)", borderRadius: "var(--radius-sm)", fontSize: 12 }}>
+                                  <div style={{ fontWeight: 600, marginBottom: 4, color: "var(--accent)" }}>工具调用</div>
+                                  {item.answer.toolCalls.map((tc, i) => (
+                                    <div key={i} style={{ marginBottom: 2 }}>
+                                      {tc.success ? "✓" : "✗"} <code style={{ background: "var(--bg-2)", padding: "0 4px" }}>{tc.tool}</code> — {tc.summary} ({tc.durationMs}ms)
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {item.answer.summary && (
+                                <div style={{ padding: "10px 14px", background: "var(--accent)", color: "#fff", borderRadius: "var(--radius-sm)", marginBottom: 10, fontWeight: 500 }}>
+                                  {item.answer.summary}
+                                </div>
+                              )}
+                              {item.answer.diagnosis && item.answer.diagnosis.length > 0 && (
+                                <div style={{ marginBottom: 10 }}>
+                                  <h4 style={{ fontSize: 14, marginBottom: 6 }}>问题诊断</h4>
+                                  {item.answer.diagnosis.map((d, i) => (
+                                    <div key={i} style={{ marginBottom: 6, padding: "6px 10px", background: "var(--bg)", borderRadius: "var(--radius-sm)", fontSize: 13 }}>
+                                      <span style={{ fontWeight: 600 }}>{d.issue}</span>
+                                      <SeverityBadge severity={d.severity} />
+                                      <div style={{ color: "var(--text-2)", marginTop: 2 }}>{d.evidence}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {item.answer.recommendations && item.answer.recommendations.length > 0 && (
+                                <div style={{ marginBottom: 10 }}>
+                                  <h4 style={{ fontSize: 14, marginBottom: 6 }}>改进建议</h4>
+                                  {item.answer.recommendations.map((r, i) => (
+                                    <div key={i} style={{ marginBottom: 6, padding: "6px 10px", background: "var(--bg)", borderRadius: "var(--radius-sm)", fontSize: 13 }}>
+                                      <span style={{ fontWeight: 600 }}>{r.title}</span>
+                                      <PriorityBadge priority={r.priority} />
+                                      <div style={{ color: "var(--text-2)", marginTop: 2 }}>{r.detail}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {item.answer.trainingPlan && item.answer.trainingPlan.length > 0 && (
+                                <div style={{ marginBottom: 10 }}>
+                                  <h4 style={{ fontSize: 14, marginBottom: 6 }}>训练计划</h4>
+                                  {item.answer.trainingPlan.map((p, i) => (
+                                    <div key={i} style={{ marginBottom: 4, padding: "6px 10px", background: "var(--bg)", borderRadius: "var(--radius-sm)", fontSize: 13 }}>
+                                      <span style={{ fontWeight: 700, color: "var(--accent)" }}>{p.day}</span>: {p.content}
+                                      {p.focus && <span style={{ color: "var(--text-2)" }}> · {p.focus}</span>}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {item.answer.references && item.answer.references.length > 0 && (
+                                <div>
+                                  <h4 style={{ fontSize: 14, marginBottom: 6 }}>参考来源</h4>
+                                  {item.answer.references.map((ref, i) => (
+                                    <div key={i} style={{
+                                      marginBottom: 6, padding: "6px 10px",
+                                      background: "var(--bg)", borderRadius: "var(--radius-sm)",
+                                      fontSize: 12, lineHeight: 1.5,
+                                    }}>
+                                      <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>
+                                        [{i + 1}] {ref.title}
+                                      </div>
+                                      {ref.snippet && (
+                                        <div style={{ color: "var(--text-2)", wordBreak: "break-word" }}>
+                                          {ref.snippet}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
