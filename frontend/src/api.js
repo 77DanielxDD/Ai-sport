@@ -8,6 +8,10 @@ export function getToken() {
 }
 
 export function setToken(token) {
+  const previousToken = getToken();
+  if (previousToken && previousToken !== token) {
+    useStore.getState().clearVideos();
+  }
   if (token) localStorage.setItem("ai_sport_token", token);
 }
 
@@ -23,6 +27,7 @@ export function clearToken() {
   localStorage.removeItem("ai_sport_token");
   localStorage.removeItem("ai_sport_username");
   localStorage.removeItem("ai_sport_role");
+  useStore.getState().clearAuth();
 }
 
 async function request(path, options = {}) {
@@ -96,7 +101,7 @@ export function uploadVideo({ file, exerciseType }) {
   form.append("file", file);
   form.append("exerciseType", exerciseType);
   return request("/api/videos/upload", { method: "POST", body: form }).then((r) => {
-    useStore.getState().setVideos([]);
+    useStore.getState().clearVideos();
     return r;
   });
 }
@@ -126,7 +131,7 @@ export function uploadVideoWithProgress({ file, exerciseType, durationSec, onPro
       catch { body = xhr.responseText; }
 
       if (xhr.status >= 200 && xhr.status < 300) {
-        useStore.getState().setVideos([]);
+        useStore.getState().clearVideos();
         resolve(body);
         return;
       }
@@ -163,13 +168,14 @@ export function compareVideos(leftId, rightId) {
 }
 
 export function listVideos({ forceRefresh = false } = {}) {
+  const owner = localStorage.getItem("ai_sport_username") || null;
   if (!forceRefresh) {
     const state = useStore.getState();
-    if (!state.isVideoListStale() && state.videos.length > 0) return Promise.resolve(state.videos);
+    if (!state.isVideoListStale(owner) && state.videos.length > 0) return Promise.resolve(state.videos);
   }
   return request("/api/videos").then((data) => {
     const items = Array.isArray(data) ? data : data?.items || [];
-    useStore.getState().setVideos(items);
+    useStore.getState().setVideos(items, owner);
     return items;
   });
 }
