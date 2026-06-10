@@ -424,16 +424,6 @@ export default function ReportPage() {
 
                           {item.answer && (
                             <>
-                              {item.answer.toolCalls && item.answer.toolCalls.length > 0 && (
-                                <div style={{ marginBottom: 10, padding: 8, background: "var(--bg)", borderRadius: "var(--radius-sm)", fontSize: 12 }}>
-                                  <div style={{ fontWeight: 600, marginBottom: 4, color: "var(--accent)" }}>工具调用</div>
-                                  {item.answer.toolCalls.map((tc, i) => (
-                                    <div key={i} style={{ marginBottom: 2 }}>
-                                      {tc.success ? "✓" : "✗"} <code style={{ background: "var(--bg-2)", padding: "0 4px" }}>{tc.tool}</code> — {tc.summary} ({tc.durationMs}ms)
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
                               {item.answer.summary && (
                                 <div style={{ padding: "10px 14px", background: "var(--accent)", color: "#fff", borderRadius: "var(--radius-sm)", marginBottom: 10, fontWeight: 500 }}>
                                   {item.answer.summary}
