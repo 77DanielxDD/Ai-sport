@@ -37,8 +37,8 @@ AI 驱动的运动视频分析平台。上传训练视频 → 异步 MediaPipe �
 | 消息队列 | RabbitMQ 3 (spring-boot-starter-amqp) |
 | 缓存 | Redis 7 (spring-boot-starter-cache) |
 | 数据库 | MySQL 8.4 |
-| AI 服务 | Python 3.11, FastAPI, MediaPipe 0.10, OpenCV |
-| LLM | DeepSeek API (Agent + RAG) |
+| AI 服务 | Python 3.11, FastAPI, MediaPipe 0.10, OpenCV, LangChain, Chroma, BM25 |
+| LLM | DeepSeek API (LangChain Agent + RAG 混合检索) |
 | 对象存储 | 腾讯云 COS（可选） |
 | CI/CD | GitHub Actions（后端编译/测试/打包 + 前端构建） |
 | 基础设施 | Docker Compose, Nginx |
@@ -53,8 +53,10 @@ AI 驱动的运动视频分析平台。上传训练视频 → 异步 MediaPipe �
 - **8 种动作** — 俯卧撑、深蹲、卧推、硬拉、哑铃推肩、哑铃侧平举、哑铃二头弯举、引体向上
 
 ### AI 智能问答
+- **LangChain Agentic RAG** — Python FastAPI 端 LangChain Agent 编排，Spring Boot 通过 `PythonAgentClient` 优先调用 Python Agent，回退至 Java Agent
 - Agent 编排 5 个工具：知识搜索、分数趋势、训练历史、用户记忆、视频报告
-- RAG 混合检索（稠密 + 稀疏 + 增量索引），结合用户历史与健身知识库
+- RAG 混合检索：Chroma 向量 + BM25 稀疏 → Query Rewriting → Rerank → RAGAS 评测
+- 增量索引管线（ingest pipeline），支持 `/rag/reindex` / `/rag/status` 端点
 - 预设问题 + 自由提问，流式输出结构化诊断与训练计划
 - 问答历史 localStorage 持久化，跨会话保留
 
@@ -141,7 +143,10 @@ ai-sport/
 │       ├── rag/          # RAG 检索增强
 │       └── task/         # 异步任务管理
 ├── ai-service/           # Python AI 服务
-│   └── app/main.py       # MediaPipe 姿态分析
+│   ├── app/main.py       # MediaPipe 姿态分析 + FastAPI
+│   ├── app/agent/        # LangChain Agent 编排
+│   ├── app/rag/          # Chroma + BM25 混合检索
+│   └── app/clients/      # LLM / Backend / Redis 客户端
 ├── deploy/               # 部署配置
 │   └── cloud/            # Nginx + Docker Compose
 ├── .github/workflows/    # CI/CD 流水线
