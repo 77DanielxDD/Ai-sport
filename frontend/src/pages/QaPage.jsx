@@ -62,22 +62,6 @@ export default function QaPage() {
 
       {answer && (
         <>
-          {answer.toolCalls && answer.toolCalls.length > 0 && (
-            <div className="card fade-in" style={{ borderLeft: "3px solid var(--blue)" }}>
-              <h4 style={{ color: "var(--blue)", marginBottom: 8 }}>工具调用</h4>
-              {answer.toolCalls.map((tc, i) => (
-                <div key={i} style={{ fontSize: 13, marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ color: tc.success ? "var(--green)" : "var(--red)" }}>
-                    {tc.success ? "✓" : "✗"}
-                  </span>
-                  <code style={{ background: "var(--bg)", padding: "1px 6px", borderRadius: 4 }}>{tc.tool}</code>
-                  <span style={{ color: "var(--text-2)" }}>{tc.summary}</span>
-                  <span style={{ color: "var(--text-2)", fontSize: 11 }}>{tc.durationMs}ms</span>
-                </div>
-              ))}
-            </div>
-          )}
-
           {answer.summary && (
             <div className="card fade-in fade-in-1" style={{ borderLeft: "3px solid var(--accent)" }}>
               <h3 style={{ color: "var(--accent)" }}>分析结论</h3>
