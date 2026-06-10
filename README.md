@@ -1,6 +1,13 @@
 # AI Sport — 基于 SpringBoot 与 AI 视觉的健身动作分析系统
 
+[![CI/CD](https://github.com/77DanielxDD/Ai-sport/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/77DanielxDD/Ai-sport/actions)
+[![Java 17](https://img.shields.io/badge/Java-17-orange)](https://adoptium.net)
+[![Spring Boot 3.5](https://img.shields.io/badge/Spring_Boot-3.5-green)](https://spring.io/projects/spring-boot)
+[![React 18](https://img.shields.io/badge/React-18-61DAFB)](https://react.dev)
+
 AI 驱动的运动视频分析平台。上传训练视频 → 异步 MediaPipe 姿态分析 → 逐次多维度评分 → Agent+RAG 智能问答 → 历史对比追踪。
+
+🌐 **项目主页**: [77DanielxDD.github.io/Ai-sport](https://77DanielxDD.github.io/Ai-sport)
 
 ## 系统架构
 
@@ -33,6 +40,7 @@ AI 驱动的运动视频分析平台。上传训练视频 → 异步 MediaPipe �
 | AI 服务 | Python 3.11, FastAPI, MediaPipe 0.10, OpenCV |
 | LLM | DeepSeek API (Agent + RAG) |
 | 对象存储 | 腾讯云 COS（可选） |
+| CI/CD | GitHub Actions（后端编译/测试/打包 + 前端构建） |
 | 基础设施 | Docker Compose, Nginx |
 
 ## 核心功能
@@ -41,12 +49,14 @@ AI 驱动的运动视频分析平台。上传训练视频 → 异步 MediaPipe �
 - **上传引导** — 拍摄建议、视频预览、时长/大小校验、上传进度
 - **异步任务** — RabbitMQ 解耦，6 阶段进度追踪，自动轮询
 - **分析报告** — 逐次多维度评估（深度 45% / 稳定性 20% / 对称性 20% / 节奏加成），加权综合评分
+- **关键帧画廊** — 缩略图网格 + Lightbox 灯箱查看，逐帧姿态标注
 - **8 种动作** — 俯卧撑、深蹲、卧推、硬拉、哑铃推肩、哑铃侧平举、哑铃二头弯举、引体向上
 
 ### AI 智能问答
 - Agent 编排 5 个工具：知识搜索、分数趋势、训练历史、用户记忆、视频报告
-- RAG 检索增强生成，结合用户历史与健身知识库
+- RAG 混合检索（稠密 + 稀疏 + 增量索引），结合用户历史与健身知识库
 - 预设问题 + 自由提问，流式输出结构化诊断与训练计划
+- 问答历史 localStorage 持久化，跨会话保留
 
 ### 训练成长
 - **报告对比** — 9 区对比分析：结论、指标、四维条形、逐次表格、关键帧、趋势、问题变化、建议、历史排名
@@ -55,6 +65,7 @@ AI 驱动的运动视频分析平台。上传训练视频 → 异步 MediaPipe �
 ### 系统特性
 - JWT 认证 + 速率限制
 - 管理后台（用户管理、系统监控、清理任务）
+- GitHub Actions CI/CD（自动编译、测试、打包）
 - COS 对象存储（可选）
 - JMeter 压力测试覆盖
 
@@ -133,6 +144,7 @@ ai-sport/
 │   └── app/main.py       # MediaPipe 姿态分析
 ├── deploy/               # 部署配置
 │   └── cloud/            # Nginx + Docker Compose
+├── .github/workflows/    # CI/CD 流水线
 ├── docs/                 # 文档
 │   ├── TECH_STACK_AND_SOP.md
 │   ├── api_reference.md
