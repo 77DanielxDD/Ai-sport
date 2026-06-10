@@ -11,6 +11,10 @@ import cv2
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from app.agent import agent_service
+from app.agent.schemas import AgentChatRequest, AgentChatResponse, ReindexResponse, RagStatusResponse
+from app.rag import ingest
+
 try:
     import mediapipe as mp
 except Exception:  # pragma: no cover
@@ -634,3 +638,37 @@ def render_keyframe(
     cv2.putText(canvas, safe_tip, (20, 62), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (20, 20, 20), 4, cv2.LINE_AA)
     cv2.putText(canvas, safe_tip, (20, 62), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2, cv2.LINE_AA)
     return canvas
+
+
+# ---- Agent / RAG endpoints ----
+
+
+@app.post("/agent/chat", response_model=AgentChatResponse)
+def agent_chat(req: AgentChatRequest):
+    """Process a user question through the LangChain Agent + RAG pipeline."""
+    try:
+        return agent_service.process_question(req)
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=f"Agent processing failed: {ex}")
+
+
+@app.post("/rag/reindex", response_model=ReindexResponse)
+def rag_reindex():
+    """Rebuild the knowledge base index (Chroma + BM25)."""
+    try:
+        result = ingest.reindex()
+        return ReindexResponse(**result)
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=f"Reindex failed: {ex}")
+
+
+@app.get("/rag/status", response_model=RagStatusResponse)
+def rag_status():
+    """Get current RAG index status."""
+    from app.rag import bm25_store, vector_store
+    return RagStatusResponse(
+        status="ok",
+        vector_store="Chroma",
+        chunk_count=vector_store.get_chunk_count(),
+        has_bm25=bm25_store.is_built(),
+    )
