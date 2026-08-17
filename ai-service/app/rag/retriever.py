@@ -68,9 +68,12 @@ def hybrid_retrieve(
     for rank, r in enumerate(dense_results):
         score = 1.0 - (rank / max(len(dense_results), 1))
         key = r["content"][:100]
+        metadata = r.get("metadata", {})
+        chunk_id = metadata.get("chunk_id")
         merged[key] = {
             "content": r["content"],
-            "metadata": r.get("metadata", {}),
+            "metadata": metadata,
+            "chunk_id": chunk_id,
             "dense_score": round(score, 4),
             "bm25_score": 0.0,
             "final_score": round(score * dense_weight, 4),
@@ -80,6 +83,8 @@ def hybrid_retrieve(
     for r in bm25_results:
         score = r.get("bm25_score", 0) / max(max_bm25, 1.0)
         key = r["content"][:100]
+        metadata = r.get("metadata", {})
+        chunk_id = metadata.get("chunk_id")
         if key in merged:
             merged[key]["bm25_score"] = round(score, 4)
             merged[key]["final_score"] = round(
@@ -89,7 +94,8 @@ def hybrid_retrieve(
         else:
             merged[key] = {
                 "content": r["content"],
-                "metadata": r.get("metadata", {}),
+                "metadata": metadata,
+                "chunk_id": chunk_id,
                 "dense_score": 0.0,
                 "bm25_score": round(score, 4),
                 "final_score": round(score * bm25_weight, 4),

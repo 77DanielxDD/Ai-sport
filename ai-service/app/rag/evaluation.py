@@ -1,146 +1,203 @@
+"""Offline retrieval evaluation using pytrec_eval.
+
+Replaces the previous RAGAS-based evaluation with a standard IR evaluation
+pipeline: load a JSONL dataset, run retrieval for each query, build run/qrels,
+and compute metrics via pytrec_eval.
+
+Dataset format (one JSON object per line):
+{
+    "query_id": "q0001",
+    "question": "...",
+    "relevant_doc_ids": {"chunk_0012": 2, "chunk_0044": 1}
+}
+"""
 from __future__ import annotations
 
-from typing import Dict, List
+import json
+import logging
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-_EVAL_DATASET: List[Dict] = []
+logger = logging.getLogger(__name__)
 
+DEFAULT_DATASET_PATH = Path(__file__).resolve().parent / "eval_dataset.jsonl"
 
-def get_default_dataset() -> List[Dict]:
-    """Small benchmark dataset for RAG quality evaluation."""
-    return [
-        {
-            "question": "深蹲时膝盖内扣怎么改善？",
-            "ground_truth": (
-                "深蹲膝盖内扣需要通过以下方法改善：加强髋外展肌群（如臀中肌）力量，"
-                "用弹力带绕膝进行侧向行走激活；下蹲时有意识地将膝盖朝脚尖方向打开；"
-                "先降低负重，在较轻重量下建立正确的下肢力线后再逐步加重。"
-            ),
-        },
-        {
-            "question": "俯卧撑手腕疼是什么原因？",
-            "ground_truth": (
-                "俯卧撑手腕疼常见原因是手腕过度伸展、手掌位置不当或腕关节活动度不足。"
-                "纠正方法：手掌放在肩膀正下方，手指张开分散压力；保持手腕中立位；"
-                "可使用俯卧撑支架或拳卧撑减轻手腕伸展角度；训练前做手腕环绕热身。"
-            ),
-        },
-        {
-            "question": "硬拉时腰背应该保持什么姿势？",
-            "ground_truth": (
-                "硬拉时腰背应保持脊柱中立位，胸椎伸展，核心收紧建立腹内压。"
-                "起拉前杠铃贴近小腿，保持背部张力，避免弓背或过度反弓。"
-                "若动作变形应立即停止并降低负荷。"
-            ),
-        },
-        {
-            "question": "如何判断训练重量是否合适？",
-            "ground_truth": (
-                "训练重量合适的标准：能够完成目标次数且最后一两次有挑战但动作不变形。"
-                "若动作幅度减小、身体代偿明显或无法控制离心阶段则重量过大。"
-                "建议以技术优先，先用50%-70%负荷建立动作标准再逐步加重。"
-            ),
-        },
-        {
-            "question": "每次训练应该做多少组？",
-            "ground_truth": (
-                "一般建议每个动作做3-5组，根据训练目标调整：力量训练3-5组低次数（3-6次），"
-                "增肌训练3-4组中等次数（8-12次），耐力训练2-3组高次数（15-20次）。"
-                "初学者可从2-3组开始逐步增加。"
-            ),
-        },
-    ]
+DEFAULT_METRICS = [
+    "map",
+    "ndcg_cut.10",
+    "recall.1",
+    "recall.5",
+    "recall.10",
+    "P.1",
+    "P.5",
+    "P.10",
+    "mrr_cut.10",
+]
 
 
-def run_evaluation(retrieve_fn, generate_fn) -> Dict:
-    """Run RAGAS evaluation.
+def load_dataset(path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Load evaluation dataset from JSONL file."""
+    filepath = Path(path) if path else DEFAULT_DATASET_PATH
+    if not filepath.exists():
+        raise FileNotFoundError(f"Evaluation dataset not found: {filepath}")
+
+    samples = []
+    with open(filepath, "r", encoding="utf-8") as f:
+        for line_no, line in enumerate(f, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                sample = json.loads(line)
+                required = {"query_id", "question", "relevant_doc_ids"}
+                missing = required - set(sample.keys())
+                if missing:
+                    raise ValueError(f"Missing fields: {missing}")
+                samples.append(sample)
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning("Skipping invalid line %d: %s", line_no, e)
+    return samples
+
+
+def build_qrels(samples: List[Dict[str, Any]]) -> Dict[str, Dict[str, int]]:
+    """Build qrels dict from dataset samples.
+
+    Returns: {query_id: {doc_id: relevance}}
+    """
+    qrels: Dict[str, Dict[str, int]] = {}
+    for sample in samples:
+        qid = sample["query_id"]
+        qrels[qid] = {
+            doc_id: int(rel)
+            for doc_id, rel in sample["relevant_doc_ids"].items()
+        }
+    return qrels
+
+
+def build_run(
+    samples: List[Dict[str, Any]],
+    retrieve_fn,
+    top_k: int = 10,
+) -> Dict[str, Dict[str, float]]:
+    """Run retrieval for each query and build run dict.
 
     Args:
-        retrieve_fn: function(question) -> List[Dict] with 'content' key
-        generate_fn: function(question, contexts) -> str
+        samples: list of evaluation samples
+        retrieve_fn: function(question, top_k) -> List[Dict] where each dict
+                     has 'chunk_id' and 'final_score' keys
+        top_k: number of results to retrieve per query
 
-    Returns dict with metric scores.
+    Returns: {query_id: {doc_id: score}}
     """
-    dataset = get_default_dataset()
+    run: Dict[str, Dict[str, float]] = {}
+    for sample in samples:
+        qid = sample["query_id"]
+        question = sample["question"]
+        results = retrieve_fn(question, top_k=top_k)
 
-    questions = []
-    answers = []
-    contexts_list = []
-    ground_truths = []
+        doc_scores: Dict[str, float] = {}
+        for r in results:
+            chunk_id = r.get("chunk_id") or r.get("metadata", {}).get("chunk_id")
+            if chunk_id:
+                doc_scores[chunk_id] = r.get("final_score", 0.0)
+        run[qid] = doc_scores
+    return run
 
-    for item in dataset:
-        q = item["question"]
-        gt = item["ground_truth"]
 
-        contexts_raw = retrieve_fn(q)
-        contexts = [c["content"] if isinstance(c, dict) else str(c) for c in (contexts_raw or [])]
-        answer = generate_fn(q, contexts)
+def evaluate(
+    qrels: Dict[str, Dict[str, int]],
+    run: Dict[str, Dict[str, float]],
+    metrics: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Run pytrec_eval and return per-query and aggregate metrics.
 
-        questions.append(q)
-        answers.append(answer)
-        contexts_list.append(contexts)
-        ground_truths.append(gt)
-
+    Returns:
+        {
+            "aggregate": {"map": 0.45, "ndcg_cut_10": 0.52, ...},
+            "per_query": {"q0001": {"map": 0.5, ...}, ...},
+            "failed_queries": ["q0003", ...]
+        }
+    """
     try:
-        from ragas import evaluate
-        from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall
-        from datasets import Dataset as HfDataset
-
-        eval_data = HfDataset.from_dict({
-            "question": questions,
-            "answer": answers,
-            "contexts": contexts_list,
-            "ground_truth": ground_truths,
-        })
-
-        scores = evaluate(
-            eval_data,
-            metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
-        )
-        return {
-            "faithfulness": round(float(scores.get("faithfulness", 0)), 4),
-            "answer_relevancy": round(float(scores.get("answer_relevancy", 0)), 4),
-            "context_precision": round(float(scores.get("context_precision", 0)), 4),
-            "context_recall": round(float(scores.get("context_recall", 0)), 4),
-        }
+        import pytrec_eval
     except ImportError:
-        return {
-            "error": "ragas or datasets not installed",
-            "note": "pip install ragas datasets to enable evaluation",
+        return {"error": "pytrec_eval not installed. Run: pip install pytrec_eval"}
+
+    if metrics is None:
+        metrics = list(DEFAULT_METRICS)
+
+    evaluator = pytrec_eval.RelevanceEvaluator(qrels, metrics)
+    per_query_raw = evaluator.evaluate(run)
+
+    # Aggregate
+    aggregate: Dict[str, float] = {}
+    failed_queries: List[str] = []
+
+    for metric in metrics:
+        pytrec_key = metric.replace(",", "_")  # pytrec uses underscores
+        values = []
+        for qid, scores in per_query_raw.items():
+            if metric in scores:
+                values.append(scores[metric])
+            elif pytrec_key in scores:
+                values.append(scores[pytrec_key])
+        if values:
+            aggregate[metric] = round(sum(values) / len(values), 4)
+        else:
+            aggregate[metric] = 0.0
+
+    # Find queries with no retrieval results
+    for qid in qrels:
+        if qid not in run or not run[qid]:
+            failed_queries.append(qid)
+
+    # Clean per_query output
+    per_query: Dict[str, Dict[str, float]] = {}
+    for qid, scores in per_query_raw.items():
+        per_query[qid] = {
+            m: round(scores.get(m, scores.get(m.replace(",", "_"), 0.0)), 4)
+            for m in metrics
         }
-    except Exception as e:
-        return {"error": f"Evaluation failed: {e}"}
-
-
-def evaluation_report() -> Dict:
-    """Generate a full evaluation report on current RAG pipeline."""
-    from ..rag import retriever as rag_retriever
-    from ..rag.ingest import ensure_index
-
-    ensure_index()
-
-    def retrieve_fn(question: str) -> List[Dict]:
-        return rag_retriever.hybrid_retrieve(question, top_k=5, use_cache=False)
-
-    def generate_fn(question: str, contexts: List[str]) -> str:
-        if not contexts:
-            return "No knowledge found."
-        context_text = "\n\n".join(contexts[:3])
-        from ..clients.llm_client import get_llm
-
-        try:
-            llm = get_llm()
-            prompt = (
-                f"基于以下健身知识回答问题。\n\n知识：\n{context_text}\n\n问题：{question}\n\n回答："
-            )
-            result = llm.invoke(prompt)
-            return result.content if hasattr(result, "content") else str(result)
-        except Exception:
-            return f"Based on fitness knowledge: {context_text[:300]}..."
-
-    scores = run_evaluation(retrieve_fn, generate_fn)
 
     return {
-        "dataset_size": len(get_default_dataset()),
-        "metrics": scores,
-        "note": "Baseline evaluation of the current RAG pipeline",
+        "aggregate": aggregate,
+        "per_query": per_query,
+        "failed_queries": failed_queries,
+        "num_queries": len(qrels),
     }
+
+
+def run_evaluation(
+    dataset_path: Optional[str] = None,
+    retrieve_fn=None,
+    top_k: int = 10,
+    metrics: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """End-to-end evaluation: load dataset -> retrieve -> evaluate.
+
+    Args:
+        dataset_path: path to JSONL eval dataset (defaults to eval_dataset.jsonl)
+        retrieve_fn: custom retrieval function. If None, uses hybrid_retrieve.
+        top_k: number of results per query
+        metrics: list of pytrec_eval metric strings
+
+    Returns evaluation report dict.
+    """
+    samples = load_dataset(dataset_path)
+    if not samples:
+        return {"error": "No valid samples in dataset"}
+
+    qrels = build_qrels(samples)
+
+    if retrieve_fn is None:
+        from . import retriever as rag_retriever
+
+        def retrieve_fn(question: str, top_k: int = 10) -> List[Dict]:
+            return rag_retriever.hybrid_retrieve(question, top_k=top_k, use_cache=False)
+
+    run = build_run(samples, retrieve_fn, top_k=top_k)
+    result = evaluate(qrels, run, metrics=metrics)
+
+    result["dataset_path"] = str(dataset_path or DEFAULT_DATASET_PATH)
+    result["top_k"] = top_k
+    return result
