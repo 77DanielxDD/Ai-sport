@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from ..clients import llm_client
 from ..clients import redis_client as cache
-from . import prompts, schemas, tools
+from . import intent, prompts, schemas, tools
 
 
 def _extract_json(text: str) -> Optional[str]:
@@ -270,7 +270,7 @@ def process_question(req: schemas.AgentChatRequest) -> schemas.AgentChatResponse
     if cached:
         return schemas.AgentChatResponse(**cached)
 
-    # Stage 1: Decide which tools to call
+    # Stage 1: Classify intent (GLM) then decide which tools to call
     try:
         llm = llm_client.get_llm()
         tool_descriptions = tools.build_tool_descriptions()
@@ -278,6 +278,8 @@ def process_question(req: schemas.AgentChatRequest) -> schemas.AgentChatResponse
         focus_info = ""
         if req.focus_video_id:
             focus_info = f"Focus VideoId: {req.focus_video_id}\n(user is asking about this specific training session)"
+
+        intent_result = intent.classify_intent(req.question)
 
         from langchain.prompts import ChatPromptTemplate
         plan_prompt = ChatPromptTemplate.from_messages([
@@ -290,6 +292,7 @@ def process_question(req: schemas.AgentChatRequest) -> schemas.AgentChatResponse
             "username": req.username,
             "user_id": req.user_id,
             "focus_info": focus_info,
+            "intent_label": intent_result["label"],
             "tool_descriptions": tool_descriptions,
             "question": req.question,
         })

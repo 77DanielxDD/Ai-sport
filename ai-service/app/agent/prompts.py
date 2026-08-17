@@ -19,6 +19,9 @@ Username: {username}
 UserId: {user_id}
 {focus_info}
 
+## User Intent
+{intent_label}
+
 ## Tools Available
 {tool_descriptions}
 
