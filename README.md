@@ -38,7 +38,7 @@ AI 驱动的运动视频分析平台。上传训练视频 → 异步 MediaPipe �
 | 缓存 | Redis 7 (spring-boot-starter-cache) |
 | 数据库 | MySQL 8.4 |
 | AI 服务 | Python 3.11, FastAPI, MediaPipe 0.10, OpenCV, LangChain, Chroma, BM25 |
-| LLM | DeepSeek API (LangChain Agent + RAG 混合检索) |
+| LLM | GLM-4-flash 智谱 AI (LangChain Agent + RAG 混合检索 + bge-reranker 神经网络重排) |
 | 对象存储 | 腾讯云 COS（可选） |
 | CI/CD | GitHub Actions（后端编译/测试/打包 + 前端构建） |
 | 基础设施 | Docker Compose, Nginx |
@@ -120,7 +120,7 @@ powershell -ExecutionPolicy Bypass -File scripts/run_dev.ps1
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `DEV_DB_PASSWORD` | `changeme` | MySQL root 密码 |
-| `APP_LLM_API_KEY` | — | DeepSeek API Key |
+| `APP_LLM_API_KEY` | — | GLM-4-flash API Key（智谱 AI） |
 | `APP_LLM_ENABLED` | `true` | 启用 LLM 增强 |
 | `DEV_OBJECT_STORAGE_ENABLED` | `false` | 启用 COS 存储 |
 | `APP_MAX_FILE_SIZE` | `150MB` | 上传大小上限 |

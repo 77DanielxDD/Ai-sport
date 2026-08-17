@@ -32,10 +32,10 @@ public class LLMInsightService {
     @Value("${app.llm.api-key:}")
     private String apiKey;
 
-    @Value("${app.llm.base-url:https://api.deepseek.com}")
+    @Value("${app.llm.base-url:https://open.bigmodel.cn/api/paas/v4}")
     private String baseUrl;
 
-    @Value("${app.llm.model:deepseek-chat}")
+    @Value("${app.llm.model:glm-4-flash}")
     private String model;
 
     protected LLMInsightService() {
@@ -156,7 +156,7 @@ public class LLMInsightService {
     }
 
     private String callApi(Map<String, Object> requestBody) throws Exception {
-        String url = baseUrl.replaceAll("/$", "") + "/v1/chat/completions";
+        String url = baseUrl.replaceAll("/$", "") + "/chat/completions";
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -172,7 +172,7 @@ public class LLMInsightService {
                     ? response.getBody().substring(0, Math.min(300, response.getBody().length()))
                     : "null";
             log.warn("LLM API returned non-ok status: {} body={}", response.getStatusCode(), bodySnippet);
-            throw new RuntimeException("DeepSeek API returned " + response.getStatusCode());
+            throw new RuntimeException("LLM API returned " + response.getStatusCode());
         }
         return response.getBody();
     }

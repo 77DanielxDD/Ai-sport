@@ -3,13 +3,15 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
-LLM_API_KEY = os.getenv("LLM_API_KEY", "")
-LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")
+# GLM-4-flash (BigModel 智谱 AI，OpenAI 兼容接口)。API key 由环境变量注入，
+# 优先读 APP_LLM_API_KEY，兼容旧 LLM_API_KEY。
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
+LLM_API_KEY = os.getenv("APP_LLM_API_KEY") or os.getenv("LLM_API_KEY", "")
+LLM_MODEL = os.getenv("LLM_MODEL", "glm-4-flash")
 
 
 def get_llm() -> object:
-    """Return a LangChain ChatOpenAI-compatible LLM configured for DeepSeek."""
+    """Return a LangChain ChatOpenAI-compatible LLM configured for GLM-4-flash."""
     try:
         from langchain_openai import ChatOpenAI
 

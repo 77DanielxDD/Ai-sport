@@ -63,13 +63,15 @@ def search_knowledge(query: str, top_k: int = 5) -> Dict[str, Any]:
     ensure_index()
 
     try:
-        results = rag_retriever.hybrid_retrieve(query, top_k=top_k)
+        # 先召回更多候选，再用 bge-reranker 神经网络重排截取 top_k
+        candidates = rag_retriever.hybrid_retrieve(query, top_k=top_k * 3)
+        results = rag_retriever.rerank(candidates, query, top_k=top_k)
         docs = []
         for r in results:
             docs.append({
                 "content": r["content"],
                 "title": r.get("metadata", {}).get("source", ""),
-                "score": r["final_score"],
+                "score": r.get("rerank_score", r["final_score"]),
                 "matched_by": r["matched_by"],
             })
 

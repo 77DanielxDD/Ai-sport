@@ -1,5 +1,6 @@
 # CLAUDE.md
 
+用中文回复。
 本文件只放 AI 写代码实时约束。项目背景、接口、部署、验收说明见 `README.md`、`docs/system_design.md`、`docs/api_reference.md`、`docs/deployment_guide.md`。
 
 规则冲突时：P0 > P1 > P2 > P3。
@@ -110,8 +111,8 @@ AI_MEDIA_BASE_DIR=./uploaded-videos/output
 KNOWLEDGE_PATH=
 CHROMA_DIR=./chroma_db
 LLM_API_KEY=
-LLM_BASE_URL=https://api.deepseek.com/v1
-LLM_MODEL=deepseek-chat
+LLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+LLM_MODEL=glm-4-flash
 APP_JWT_SECRET=
 APP_CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 APP_OBJECT_STORAGE_ENABLED=false

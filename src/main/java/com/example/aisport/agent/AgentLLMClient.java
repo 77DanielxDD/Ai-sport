@@ -29,10 +29,10 @@ public class AgentLLMClient {
     @Value("${app.llm.api-key:}")
     private String apiKey;
 
-    @Value("${app.llm.base-url:https://api.deepseek.com}")
+    @Value("${app.llm.base-url:https://open.bigmodel.cn/api/paas/v4}")
     private String baseUrl;
 
-    @Value("${app.llm.model:deepseek-chat}")
+    @Value("${app.llm.model:glm-4-flash}")
     private String model;
 
     public AgentLLMClient() {
@@ -82,7 +82,7 @@ public class AgentLLMClient {
         }
 
         try {
-            String url = baseUrl.replaceAll("/$", "") + "/v1/chat/completions";
+            String url = baseUrl.replaceAll("/$", "") + "/chat/completions";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(apiKey);

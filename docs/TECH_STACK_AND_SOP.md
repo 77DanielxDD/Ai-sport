@@ -129,7 +129,7 @@
 | `APP_REDIS_CACHE_ENABLED` | `false` | 启用 Redis 查询缓存 |
 | `APP_REDIS_HOST` | `127.0.0.1` | Redis 地址 |
 | `APP_REDIS_PORT` | `6379` | Redis 端口 |
-| `APP_LLM_API_KEY` | - | DeepSeek API Key（LLM 增强用） |
+| `APP_LLM_API_KEY` | - | GLM-4-flash API Key（智谱 AI，LLM 增强用） |
 | `APP_LLM_ENABLED` | `true` | 启用 LLM 洞察改写 |
 | `DEV_OBJECT_STORAGE_ENABLED` | `false` | 启用 COS 对象存储 |
 | `DEV_OBJECT_STORAGE_ACCESS_KEY` | - | COS SecretId |

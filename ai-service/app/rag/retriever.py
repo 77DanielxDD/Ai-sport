@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Dict, List, Optional
 
 from langchain.chains import LLMChain
@@ -106,16 +107,69 @@ def hybrid_retrieve(
     return sorted_results
 
 
+# SiliconFlow 托管 BAAI/bge-reranker-v2-m3 API。key 由环境变量注入，不写进源码。
+_RERANK_API_URL = os.getenv("RERANK_API_URL", "https://api.siliconflow.cn/v1/rerank")
+_RERANK_API_KEY = os.getenv("APP_RERANK_API_KEY") or os.getenv("RERANK_API_KEY", "")
+_RERANK_MODEL = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
+
+
 def rerank(
     results: List[Dict],
     query: str,
     top_k: int = 3,
     llm=None,
 ) -> List[Dict]:
-    """Heuristic rerank: boost chunks with keyword match on query terms."""
+    """Neural rerank via SiliconFlow BAAI/bge-reranker-v2-m3 API.
+
+    API 不可用（无 key / 超时 / 报错）时回退到 keyword heuristic，检索不断链。
+    每个结果写入 ``rerank_score``。
+    """
     if not results:
         return results
 
+    try:
+        scores = _api_rerank(query, results)
+        for r, s in zip(results, scores):
+            r["rerank_score"] = round(float(s), 4)
+        results.sort(key=lambda x: x["rerank_score"], reverse=True)
+        return results[:top_k]
+    except Exception:
+        return _heuristic_rerank(results, query, top_k)
+
+
+def _api_rerank(query: str, results: List[Dict]) -> List[float]:
+    if not _RERANK_API_KEY:
+        raise RuntimeError("Rerank API key not configured (APP_RERANK_API_KEY)")
+
+    import httpx
+
+    payload = {
+        "model": _RERANK_MODEL,
+        "query": query,
+        "documents": [r["content"] for r in results],
+        "top_n": len(results),
+    }
+    resp = httpx.post(
+        _RERANK_API_URL,
+        json=payload,
+        headers={"Authorization": f"Bearer {_RERANK_API_KEY}"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    ranked = data.get("results", [])
+    scores = [0.0] * len(results)
+    for item in ranked:
+        scores[item["index"]] = float(item.get("relevance_score", 0.0))
+    return scores
+
+
+def _heuristic_rerank(
+    results: List[Dict],
+    query: str,
+    top_k: int = 3,
+) -> List[Dict]:
+    """Keyword-match rerank used when the neural model is unavailable."""
     query_terms = set(query.lower().split())
 
     for r in results:
