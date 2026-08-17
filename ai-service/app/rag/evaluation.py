@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_DATASET_PATH = Path(__file__).resolve().parent / "eval_dataset.jsonl"
 
+# pytrec_eval 0.5 不支持 mrr_cut.10，用等价的 recip_rank 表达 MRR。
 DEFAULT_METRICS = [
     "map",
     "ndcg_cut.10",
@@ -31,7 +32,7 @@ DEFAULT_METRICS = [
     "P.1",
     "P.5",
     "P.10",
-    "mrr_cut.10",
+    "recip_rank",
 ]
 
 

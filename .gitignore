@@ -103,3 +103,6 @@ docs/superpowers/
 .agents/
 .github/skills/
 skills-lock.json
+
+# 离线评测运行产物
+outputs/

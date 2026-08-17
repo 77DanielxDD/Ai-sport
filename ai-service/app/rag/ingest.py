@@ -7,19 +7,22 @@ from typing import Dict, List
 
 from . import bm25_store, vector_store
 
-KNOWLEDGE_PATH = os.getenv(
-    "KNOWLEDGE_PATH",
-    str(Path(__file__).resolve().parents[4] / "src" / "main" / "resources" / "rag" / "fitness_knowledge_zh.txt"),
-)
+KNOWLEDGE_PATH = os.getenv("KNOWLEDGE_PATH", "")
 
 
 def _find_knowledge_file() -> str:
     """Resolve knowledge file path. Returns actual path so we can read it."""
-    if os.path.exists(KNOWLEDGE_PATH):
+    if KNOWLEDGE_PATH and os.path.exists(KNOWLEDGE_PATH):
         return KNOWLEDGE_PATH
     alt = os.getenv("KNOWLEDGE_PATH_ALT", "")
     if alt and os.path.exists(alt):
         return alt
+    # 向上遍历查找 <repo>/src/main/resources/rag/fitness_knowledge_zh.txt
+    # 避免依赖固定目录层级（容器内路径深度与本地不同）。
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "src" / "main" / "resources" / "rag" / "fitness_knowledge_zh.txt"
+        if candidate.exists():
+            return str(candidate)
     return KNOWLEDGE_PATH
 
 

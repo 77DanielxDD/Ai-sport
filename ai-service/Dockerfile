@@ -7,6 +7,7 @@ ENV PYTHONUNBUFFERED=1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+       gcc g++ make \
        libglib2.0-0 \
        libgl1 \
        libsm6 \

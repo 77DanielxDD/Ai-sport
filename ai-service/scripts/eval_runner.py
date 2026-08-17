@@ -10,7 +10,7 @@
 选项:
     --dataset PATH    评测数据集路径 (默认: ai-service/app/rag/eval_dataset.jsonl)
     --top-k K         每个查询返回的文档数 (默认: 10)
-    --metrics M1,M2   评估指标列表 (默认: map,ndcg_cut.10,recall.1,recall.5,recall.10,P.1,P.5,P.10,mrr_cut.10)
+    --metrics M1,M2   评估指标列表 (默认: map,ndcg_cut.10,recall.1,recall.5,recall.10,P.1,P.5,P.10,recip_rank)
     --output PATH     输出结果 JSON 路径 (可选)
     --verbose         显示每个查询的详细结果
 """
@@ -43,7 +43,7 @@ def main():
         "--metrics",
         type=str,
         default=None,
-        help="评估指标列表，逗号分隔 (默认: map,ndcg_cut.10,recall.1,recall.5,recall.10,P.1,P.5,P.10,mrr_cut.10)",
+        help="评估指标列表，逗号分隔 (默认: map,ndcg_cut.10,recall.1,recall.5,recall.10,P.1,P.5,P.10,recip_rank)",
     )
     parser.add_argument(
         "--output",
