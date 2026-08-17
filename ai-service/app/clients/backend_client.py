@@ -67,11 +67,3 @@ def get_user_profile(user_id: int) -> Optional[Dict[str, Any]]:
         return None
 
 
-def search_knowledge_api(query: str, top_k: int = 5) -> Optional[Dict[str, Any]]:
-    """Call POST /api/rag/search"""
-    try:
-        r = _get_client().post(_url("/rag/search"), json={"query": query, "topK": top_k})
-        r.raise_for_status()
-        return r.json()
-    except Exception:
-        return None

@@ -265,14 +265,6 @@ export function adminTasks() {
   return request("/api/admin/tasks");
 }
 
-export function askQuestion(question, videoId = null) {
-  return request("/api/rag/qa", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, videoId }),
-  });
-}
-
 export function deleteCurrentUserAccount(currentPassword) {
   return request("/api/users/me/delete", {
     method: "POST",

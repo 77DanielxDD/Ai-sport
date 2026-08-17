@@ -55,7 +55,6 @@
 | `controller/` | 10 个 REST 控制器 |
 | `entity/` | User、ExerciseVideo、AnalysisResult 3 个 JPA 实体 |
 | `memory/` | 用户训练记忆的定时刷新与持久化 |
-| `rag/` | RAG 检索增强生成：向量存储、嵌入、知识摄入、搜索 |
 | `security/` | JWT 过滤器、速率限制过滤器 |
 | `service/` | 核心业务：视频分析、存储、LLM 洞察、训练洞察、MQ 恢复、对象存储、查询缓存 |
 | `task/` | 异步分析任务的持久化与生命周期管理 |
@@ -230,7 +229,7 @@ powershell -ExecutionPolicy Bypass -File scripts/dev_down.ps1 -StopRabbitMq
 mvn test -DskipTests=false
 
 # 仅单元测试
-mvn test -Dtest=TrainingInsightServiceTest,LLMInsightServiceTest,AgentOrchestratorTest,SimpleEmbeddingClientTest,VectorSearchServiceTest
+mvn test -Dtest=TrainingInsightServiceTest,LLMInsightServiceTest,AgentOrchestratorTest
 
 # 集成测试（需要 MySQL 连接和 DEV_DB_PASSWORD 环境变量）
 $env:DEV_DB_PASSWORD = "changeme"
@@ -344,7 +343,6 @@ ai-sport-main/
 │   │   ├── entity/                 # JPA 实体 (3)
 │   │   ├── exception/              # 全局异常处理
 │   │   ├── memory/                 # 用户训练记忆
-│   │   ├── rag/                    # RAG 检索增强生成
 │   │   ├── repository/             # 数据仓库
 │   │   ├── security/               # JWT + 速率限制
 │   │   ├── service/                # 业务服务 (14)

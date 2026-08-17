@@ -53,7 +53,8 @@
 - `src/main/java/com/example/aisport/task/AnalysisTaskService.java`：任务状态流转
 - `src/main/java/com/example/aisport/entity/ExerciseVideo.java`：视频实体与分析结果字段
 - `src/main/java/com/example/aisport/config/SecurityConfig.java`：认证授权边界
-- `src/main/java/com/example/aisport/rag/`：Java 侧 RAG 检索与知识注入
+- `src/main/java/com/example/aisport/controller/AgentController.java`：智能问答唯一入口 `/api/agent/qa`
+- `src/main/java/com/example/aisport/agent/`：Java Agent 兜底（不承载知识检索）
 - `src/main/resources/application*.properties`：后端环境配置
 - `ai-service/app/main.py`：FastAPI、MediaPipe/OpenCV 动作分析
 - `ai-service/app/rag/ingest.py`：知识库直读、清洗、切块、元数据生成
@@ -134,6 +135,8 @@ VITE_API_BASE=/
 
 ## P2 RAG 与评测规则
 
+- Python RAG 是唯一知识检索与评测权威。Java 后端不得新增 RAG 检索、embedding、rerank、知识库索引实现。
+- Java 侧智能问答只走 `/api/agent/qa`，主链路为 Python `/agent/chat`；Java Agent 兜底不得用本地 RAG 顶替知识库。
 - 知识库默认本地文件直读，入口为 `KNOWLEDGE_PATH` 或 `src/main/resources/rag/fitness_knowledge_zh.txt`。
 - ingest 必须生成稳定 `chunk_id`，并写入 Chroma metadata 与 BM25 metadata。
 - 向量检索、BM25 检索、混合检索都必须返回 `chunk_id`。
