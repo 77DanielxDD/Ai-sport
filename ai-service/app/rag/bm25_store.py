@@ -29,9 +29,11 @@ def search(query: str, k: int = 5) -> List[Dict]:
 
     results = []
     for idx, score in top:
+        metadata = _bm25_metadatas[idx] if idx < len(_bm25_metadatas) else {}
         results.append({
             "content": _bm25_chunks[idx],
-            "metadata": _bm25_metadatas[idx] if idx < len(_bm25_metadatas) else {},
+            "metadata": metadata,
+            "chunk_id": metadata.get("chunk_id"),
             "bm25_score": round(float(score), 4),
             "source": "bm25",
         })

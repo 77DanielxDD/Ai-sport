@@ -47,7 +47,11 @@ def reset_vectorstore() -> Chroma:
 
 def add_documents(chunks: List[str], metadatas: List[Dict]) -> None:
     store = get_vectorstore()
-    store.add_texts(texts=chunks, metadatas=metadatas)
+    ids = []
+    for index, metadata in enumerate(metadatas):
+        chunk_id = metadata.get("chunk_id") if isinstance(metadata, dict) else None
+        ids.append(chunk_id or f"chunk_{index:04d}")
+    store.add_texts(texts=chunks, metadatas=metadatas, ids=ids)
 
 
 def similarity_search(query: str, k: int = 5) -> List[Dict]:
@@ -55,9 +59,11 @@ def similarity_search(query: str, k: int = 5) -> List[Dict]:
     docs = store.similarity_search(query, k=k)
     results = []
     for doc in docs:
+        metadata = dict(doc.metadata or {})
         results.append({
             "content": doc.page_content,
-            "metadata": doc.metadata,
+            "metadata": metadata,
+            "chunk_id": metadata.get("chunk_id"),
             "source": "dense",
         })
     return results

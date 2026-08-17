@@ -55,21 +55,15 @@ def hybrid_retrieve(
     # BM25 sparse retrieval
     bm25_results = bm25_store.search(query, k=top_k)
 
-    # Score fusion: combine results by content dedup and weighted scoring
+    # Score fusion: combine results by chunk_id first, fall back to content prefix.
     merged: Dict[str, Dict] = {}
-
-    # Normalize scores
-    max_dense = max(
-        (1.0 for _ in dense_results),  # Chroma returns ordered by relevance
-        default=1.0,
-    )
     max_bm25 = max((r.get("bm25_score", 0) for r in bm25_results), default=1.0)
 
     for rank, r in enumerate(dense_results):
         score = 1.0 - (rank / max(len(dense_results), 1))
-        key = r["content"][:100]
         metadata = r.get("metadata", {})
         chunk_id = metadata.get("chunk_id")
+        key = chunk_id or r["content"][:100]
         merged[key] = {
             "content": r["content"],
             "metadata": metadata,
@@ -82,9 +76,9 @@ def hybrid_retrieve(
 
     for r in bm25_results:
         score = r.get("bm25_score", 0) / max(max_bm25, 1.0)
-        key = r["content"][:100]
         metadata = r.get("metadata", {})
         chunk_id = metadata.get("chunk_id")
+        key = chunk_id or r["content"][:100]
         if key in merged:
             merged[key]["bm25_score"] = round(score, 4)
             merged[key]["final_score"] = round(
