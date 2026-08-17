@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { cancelVideo, getVideoAnalysis, getVideoStatus, listVideoTasks, retryVideo } from "../api";
+import { cancelVideo, getToken, getVideoAnalysis, getVideoStatus, listVideoTasks, retryVideo } from "../api";
 import StatusPill from "../components/StatusPill";
 import { exerciseTypeLabel } from "../utils/exerciseType";
 
@@ -33,7 +33,6 @@ export default function TaskPage() {
   const [error, setError] = useState("");
   const [canceling, setCanceling] = useState(false);
   const [retrying, setRetrying] = useState(false);
-  const timer = useRef(null);
 
   const status = statusInfo?.status;
   const hasAnalysis = !!analysis;
@@ -46,55 +45,125 @@ export default function TaskPage() {
 
   useEffect(() => {
     let stop = false;
+    let timer = null;
+    let es = null;
+    let polling = false;
 
-    async function poll() {
+    const BASE_POLL_MS = 1000;
+    const MAX_POLL_MS = 8000;
+
+    function isTerminal(status) {
+      return status === "COMPLETED" || status === "FAILED" || status === "CANCELLED";
+    }
+
+    async function fetchAnalysisOnce() {
+      if (stop) return;
+      try {
+        const a = await getVideoAnalysis(videoId);
+        if (stop) return;
+        setAnalysis(a);
+        setStatusInfo((prev) => ({ ...(prev || {}), status: "COMPLETED" }));
+      } catch (e) {
+        // 202 = 仍在分析；其余错误由轮询兜底展示
+        if (e.status === 202) return;
+        if (e.status === 500) {
+          setStatusInfo((prev) => ({ ...(prev || {}), status: "FAILED" }));
+          setError(e.body?.error || e.message);
+        } else if (e.status === 409) {
+          setStatusInfo((prev) => ({ ...(prev || {}), status: e.body?.status || "CANCELLED" }));
+          setError(e.body?.error || e.message);
+        } else if (e.status === 404) {
+          setError("视频不存在");
+        }
+      }
+    }
+
+    async function pollStatus(delayMs) {
+      if (stop || !polling) return;
+      try {
+        const s = await getVideoStatus(videoId);
+        if (stop) return;
+        setStatusInfo(s);
+
+        if (isTerminal(s?.status)) {
+          // 终态：停止轮询 + 刷新任务列表 + 只拉一次 analysis
+          polling = false;
+          listVideoTasks(videoId).then(setTasks).catch(() => {});
+          fetchAnalysisOnce();
+          return;
+        }
+
+        // 活跃态：只轮询 status，指数退避（服务端 retryAfterMs 优先）
+        const serverMs = Number(s?.retryAfterMs);
+        const next = Number.isFinite(serverMs) && serverMs > 0
+          ? Math.min(serverMs, MAX_POLL_MS)
+          : Math.min(delayMs * 2, MAX_POLL_MS);
+        timer = setTimeout(() => pollStatus(next), next);
+      } catch (e) {
+        setError(e.message || "轮询失败");
+        timer = setTimeout(() => pollStatus(BASE_POLL_MS), 2000);
+      }
+    }
+
+    function startPolling() {
+      if (stop || polling) return;
+      polling = true;
+      timer = setTimeout(() => pollStatus(BASE_POLL_MS), BASE_POLL_MS);
+    }
+
+    function stopPolling() {
+      polling = false;
+      if (timer) clearTimeout(timer);
+      timer = null;
+    }
+
+    // SSE 推送：连上后停高频轮询，断线自动回退轮询
+    function connectSSE() {
+      if (stop) return;
+      stopPolling();
+      try {
+        es = new EventSource(`/api/tasks/video/${videoId}/events?token=${encodeURIComponent(getToken())}`);
+        es.addEventListener("status", (e) => {
+          if (stop) return;
+          const status = e.data;
+          setStatusInfo((prev) => ({ ...(prev || {}), status }));
+          if (isTerminal(status)) {
+            if (es) { es.close(); es = null; }
+            listVideoTasks(videoId).then(setTasks).catch(() => {});
+            fetchAnalysisOnce();
+          }
+        });
+        es.onerror = () => {
+          if (es) { es.close(); es = null; }
+          if (!stop) startPolling();
+        };
+      } catch (e) {
+        startPolling();
+      }
+    }
+
+    // 首次进入：拉一次 status + task list；活跃态走 SSE，终态直接拉 analysis
+    (async () => {
       try {
         const s = await getVideoStatus(videoId);
         if (stop) return;
         setStatusInfo(s);
         listVideoTasks(videoId).then(setTasks).catch(() => {});
-
-        if (s?.status === "CANCELLED") return;
-
-        try {
-          const a = await getVideoAnalysis(videoId);
-          if (stop) return;
-          setAnalysis(a);
-          setStatusInfo((prev) => ({ ...(prev || {}), status: "COMPLETED" }));
-          return;
-        } catch (e) {
-          if (e.status === 202) {
-            setStatusInfo((prev) => ({ ...(prev || {}), status: e.body?.status || "PROCESSING" }));
-            const delay = Number(e.body?.retryAfterMs || 1000);
-            timer.current = setTimeout(poll, Number.isFinite(delay) && delay > 0 ? delay : 1000);
-            return;
-          }
-          if (e.status === 500) {
-            setStatusInfo((prev) => ({ ...(prev || {}), status: "FAILED" }));
-            setError(e.body?.error || e.message);
-            return;
-          }
-          if (e.status === 409) {
-            setStatusInfo((prev) => ({ ...(prev || {}), status: e.body?.status || "CANCELLED" }));
-            setError(e.body?.error || e.message);
-            return;
-          }
-          if (e.status === 404) {
-            setError("视频不存在");
-            return;
-          }
+        if (isTerminal(s?.status)) {
+          fetchAnalysisOnce();
+        } else {
+          connectSSE();
         }
-
-        timer.current = setTimeout(poll, 1000);
       } catch (e) {
-        setError(e.message || "轮询失败");
+        setError(e.message || "加载失败");
+        startPolling();
       }
-    }
+    })();
 
-    poll();
     return () => {
       stop = true;
-      if (timer.current) clearTimeout(timer.current);
+      if (timer) clearTimeout(timer);
+      if (es) es.close();
     };
   }, [videoId]);
 

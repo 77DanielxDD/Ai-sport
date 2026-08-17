@@ -33,12 +33,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        String token = null;
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            token = authHeader.substring(7);
+        } else if (request.getRequestURI().endsWith("/events")) {
+            // SSE(EventSource) 无法设置请求头，仅 /events 端点允许 ?token= 查询参数鉴权
+            token = request.getParameter("token");
+        }
+        if (token == null) {
             filterChain.doFilter(request, response);
             return;
         }
-
-        String token = authHeader.substring(7);
         if (!jwtService.isValid(token)) {
             filterChain.doFilter(request, response);
             return;

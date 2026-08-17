@@ -7,6 +7,8 @@ import com.example.aisport.service.TrainingInsightService;
 import com.example.aisport.service.UserService;
 import com.example.aisport.service.VideoService;
 import com.example.aisport.task.AnalysisTaskService;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,15 +26,18 @@ public class VideoHistoryController {
     private final UserService userService;
     private final TrainingInsightService trainingInsightService;
     private final AnalysisTaskService taskService;
+    private final Counter pollRequestCounter;
 
     public VideoHistoryController(VideoService videoService,
                                    UserService userService,
                                    TrainingInsightService trainingInsightService,
-                                   AnalysisTaskService taskService) {
+                                   AnalysisTaskService taskService,
+                                   MeterRegistry meterRegistry) {
         this.videoService = videoService;
         this.userService = userService;
         this.trainingInsightService = trainingInsightService;
         this.taskService = taskService;
+        this.pollRequestCounter = meterRegistry.counter("task_poll_request_total");
     }
 
     @GetMapping
@@ -91,6 +96,7 @@ public class VideoHistoryController {
 
     @GetMapping("/{id}/status")
     public ResponseEntity<?> getVideoStatus(@PathVariable Long id, Principal principal) {
+        pollRequestCounter.increment();
         ExerciseVideo v = requireOwnedVideo(id, principal);
         Map<String, Object> response = new HashMap<>();
         response.put("videoId", v.getId());
@@ -100,6 +106,15 @@ public class VideoHistoryController {
         response.put("processedAt", v.getProcessedAt());
         response.put("errorCode", v.getErrorCode());
         response.put("errorMessage", v.getErrorMessage());
+        // 自适应轮询建议：前端按此值退避，避免写死 1 秒。终态为 0。
+        long retryAfterMs = 0L;
+        ExerciseVideo.VideoStatus st = v.getStatus();
+        if (st == ExerciseVideo.VideoStatus.UPLOADED) {
+            retryAfterMs = 1000L;
+        } else if (st == ExerciseVideo.VideoStatus.PROCESSING) {
+            retryAfterMs = 1500L;
+        }
+        response.put("retryAfterMs", retryAfterMs);
         taskService.findLatestByVideoId(id).ifPresent(t -> {
             response.put("latestTaskId", t.getId());
             response.put("taskStatus", t.getStatus().name());

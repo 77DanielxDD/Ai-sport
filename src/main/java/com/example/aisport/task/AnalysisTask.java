@@ -43,7 +43,13 @@ public class AnalysisTask {
     @Column(length = 128)
     private String correlationId;
 
+    // 乐观锁：并发状态迁移时以 @Version 保证原子性（重复消费/重复消息只迁移一次）
+    @Version
+    private Long version;
+
     public Long getId() { return id; }
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
     public void setId(Long id) { this.id = id; }
     public Long getVideoId() { return videoId; }
     public void setVideoId(Long videoId) { this.videoId = videoId; }

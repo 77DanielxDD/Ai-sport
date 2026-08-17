@@ -1,5 +1,10 @@
 package com.example.aisport.task;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -13,10 +18,20 @@ import java.util.Optional;
 @Service
 public class AnalysisTaskService {
 
-    private final AnalysisTaskRepository repository;
+    private static final Logger log = LoggerFactory.getLogger(AnalysisTaskService.class);
 
-    public AnalysisTaskService(AnalysisTaskRepository repository) {
+    private final AnalysisTaskRepository repository;
+    private final TaskEventBroadcaster eventBroadcaster;
+    private final Counter duplicateSkipCounter;
+    private final Counter transitionCounter;
+
+    public AnalysisTaskService(AnalysisTaskRepository repository,
+                               TaskEventBroadcaster eventBroadcaster,
+                               MeterRegistry meterRegistry) {
         this.repository = repository;
+        this.eventBroadcaster = eventBroadcaster;
+        this.duplicateSkipCounter = meterRegistry.counter("task_duplicate_skip_total");
+        this.transitionCounter = meterRegistry.counter("task_status_transition_total");
     }
 
     public AnalysisTask createQueuedTask(Long videoId) {
@@ -31,39 +46,66 @@ public class AnalysisTaskService {
         task.setQueuedAt(LocalDateTime.now());
         task.setCorrelationId("video-" + videoId + "-attempt-" + attempt);
 
-        return repository.save(task);
+        AnalysisTask saved = repository.save(task);
+        eventBroadcaster.publish(videoId, AnalysisTask.TaskStatus.QUEUED.name());
+        return saved;
     }
 
     public void markProcessing(Long taskId) {
         markProcessingIfQueued(taskId);
     }
 
+    /**
+     * QUEUED -> PROCESSING 的原子迁移。
+     * 幂等键：taskId（任务表为唯一真相）。重复消费/重复消息第二次进来时任务已非 QUEUED，
+     * 直接返回 false；乐观锁兜底并发竞争。
+     */
     public boolean markProcessingIfQueued(Long taskId) {
-        return repository.findById(taskId).map(task -> {
-            if (task.getStatus() != AnalysisTask.TaskStatus.QUEUED) {
-                return false;
-            }
+        Optional<AnalysisTask> opt = repository.findById(taskId);
+        if (opt.isEmpty()) {
+            return false;
+        }
+        AnalysisTask task = opt.get();
+        if (task.getStatus() != AnalysisTask.TaskStatus.QUEUED) {
+            return false;
+        }
+        try {
             task.setStatus(AnalysisTask.TaskStatus.PROCESSING);
             task.setStartedAt(LocalDateTime.now());
             repository.save(task);
+            transitionCounter.increment();
+            eventBroadcaster.publish(task.getVideoId(), AnalysisTask.TaskStatus.PROCESSING.name());
             return true;
-        }).orElse(false);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            log.warn("Task {} transition QUEUED->PROCESSING lost optimistic lock, treated as duplicate", taskId);
+            return false;
+        }
+    }
+
+    private static boolean isTerminalState(AnalysisTask.TaskStatus status) {
+        return status == AnalysisTask.TaskStatus.COMPLETED
+                || status == AnalysisTask.TaskStatus.FAILED
+                || status == AnalysisTask.TaskStatus.CANCELLED;
     }
 
     public void markCompleted(Long taskId) {
         repository.findById(taskId).ifPresent(task -> {
-            if (task.getStatus() == AnalysisTask.TaskStatus.CANCELLED) {
+            if (isTerminalState(task.getStatus())) {
+                duplicateSkipCounter.increment();
                 return;
             }
             task.setStatus(AnalysisTask.TaskStatus.COMPLETED);
             task.setFinishedAt(LocalDateTime.now());
             repository.save(task);
+            transitionCounter.increment();
+            eventBroadcaster.publish(task.getVideoId(), AnalysisTask.TaskStatus.COMPLETED.name());
         });
     }
 
     public void markFailed(Long taskId, String code, String message) {
         repository.findById(taskId).ifPresent(task -> {
-            if (task.getStatus() == AnalysisTask.TaskStatus.CANCELLED) {
+            if (isTerminalState(task.getStatus())) {
+                duplicateSkipCounter.increment();
                 return;
             }
             task.setStatus(AnalysisTask.TaskStatus.FAILED);
@@ -71,12 +113,19 @@ public class AnalysisTaskService {
             task.setErrorMessage(message);
             task.setFinishedAt(LocalDateTime.now());
             repository.save(task);
+            transitionCounter.increment();
+            eventBroadcaster.publish(task.getVideoId(), AnalysisTask.TaskStatus.FAILED.name());
         });
     }
 
     public boolean markCancelled(Long taskId, String code, String message) {
         return repository.findById(taskId).map(task -> {
-            if (task.getStatus() == AnalysisTask.TaskStatus.COMPLETED || task.getStatus() == AnalysisTask.TaskStatus.FAILED) {
+            if (task.getStatus() == AnalysisTask.TaskStatus.COMPLETED
+                    || task.getStatus() == AnalysisTask.TaskStatus.FAILED) {
+                duplicateSkipCounter.increment();
+                return false;
+            }
+            if (task.getStatus() == AnalysisTask.TaskStatus.CANCELLED) {
                 return false;
             }
             task.setStatus(AnalysisTask.TaskStatus.CANCELLED);
@@ -84,8 +133,24 @@ public class AnalysisTaskService {
             task.setErrorMessage(message);
             task.setFinishedAt(LocalDateTime.now());
             repository.save(task);
+            transitionCounter.increment();
+            eventBroadcaster.publish(task.getVideoId(), AnalysisTask.TaskStatus.CANCELLED.name());
             return true;
         }).orElse(false);
+    }
+
+    /** 记录一次重复消息/重复处理的跳过，供 Prometheus 观测。 */
+    public void recordDuplicateSkip(Long taskId, String reason) {
+        duplicateSkipCounter.increment();
+        log.debug("Skipped duplicate task {} reason={}", taskId, reason);
+    }
+
+    public boolean isTerminal(Long taskId) {
+        return repository.findById(taskId)
+                .map(t -> t.getStatus() == AnalysisTask.TaskStatus.COMPLETED
+                        || t.getStatus() == AnalysisTask.TaskStatus.FAILED
+                        || t.getStatus() == AnalysisTask.TaskStatus.CANCELLED)
+                .orElse(false);
     }
 
     public boolean isCancelled(Long taskId) {

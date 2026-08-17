@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class VideoAnalysisProducer {
@@ -34,6 +35,10 @@ public class VideoAnalysisProducer {
         message.put("originalFileName", video.getOriginalFileName());
         message.put("timestamp", System.currentTimeMillis());
         message.put("correlationId", task.getCorrelationId());
+        // 追踪字段：同一条消息重投时 messageId 不变，便于去重与排查
+        message.put("messageId", UUID.randomUUID().toString());
+        message.put("schemaVersion", 1);
+        message.put("attempt", task.getAttempt());
 
         rabbitTemplate.convertAndSend(exchange, routingKey, message);
     }
