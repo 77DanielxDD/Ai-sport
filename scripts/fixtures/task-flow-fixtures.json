@@ -1,0 +1,38 @@
+{
+  "fixtureDir": "E:\\视频",
+  "_note": "视频文件不提交 Git，手动放入 fixtureDir。",
+  "cases": [
+    {
+      "name": "pushup_success",
+      "file": "pushup_short.mp4",
+      "exerciseType": "PUSHUP",
+      "expectedFinalStatus": "COMPLETED",
+      "optional": false,
+      "_comment": "需要 5-15 秒标准俯卧撑视频，确保 MediaPipe 能检出姿态点。"
+    },
+    {
+      "name": "squat_success",
+      "file": "深蹲.mp4",
+      "exerciseType": "SQUAT",
+      "expectedFinalStatus": "COMPLETED",
+      "optional": false,
+      "_comment": "直接用现有深蹲视频。"
+    },
+    {
+      "name": "no_pose_failure",
+      "file": "no_pose_short.mp4",
+      "exerciseType": "PUSHUP",
+      "expectedFinalStatus": "FAILED",
+      "optional": false,
+      "_comment": "需要无人/无姿态点视频（白墙、风景等），使 MediaPipe 返回空姿态。"
+    },
+    {
+      "name": "deadlift_success",
+      "file": "硬拉.mp4",
+      "exerciseType": "DEADLIFT",
+      "expectedFinalStatus": "COMPLETED",
+      "optional": true,
+      "_comment": "额外动作，可选。"
+    }
+  ]
+}

@@ -37,7 +37,7 @@ public class VideoHistoryController {
         this.userService = userService;
         this.trainingInsightService = trainingInsightService;
         this.taskService = taskService;
-        this.pollRequestCounter = meterRegistry.counter("task_poll_request_total");
+        this.pollRequestCounter = meterRegistry.counter("ai_sport_task_poll_request_total");
     }
 
     @GetMapping

@@ -106,3 +106,6 @@ skills-lock.json
 
 # 离线评测运行产物
 outputs/
+
+# 端到端链路 smoke 日志
+logs/

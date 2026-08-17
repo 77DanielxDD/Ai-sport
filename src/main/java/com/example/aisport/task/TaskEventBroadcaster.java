@@ -27,8 +27,8 @@ public class TaskEventBroadcaster {
     private final Counter disconnectCounter;
 
     public TaskEventBroadcaster(MeterRegistry meterRegistry) {
-        this.pushEventCounter = meterRegistry.counter("task_push_event_total");
-        this.disconnectCounter = meterRegistry.counter("task_push_disconnect_total");
+        this.pushEventCounter = meterRegistry.counter("ai_sport_task_push_event_total");
+        this.disconnectCounter = meterRegistry.counter("ai_sport_task_push_disconnect_total");
     }
 
     public SseEmitter subscribe(Long videoId) {

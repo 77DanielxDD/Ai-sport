@@ -30,8 +30,8 @@ public class AnalysisTaskService {
                                MeterRegistry meterRegistry) {
         this.repository = repository;
         this.eventBroadcaster = eventBroadcaster;
-        this.duplicateSkipCounter = meterRegistry.counter("task_duplicate_skip_total");
-        this.transitionCounter = meterRegistry.counter("task_status_transition_total");
+        this.duplicateSkipCounter = meterRegistry.counter("ai_sport_task_duplicate_skip_total");
+        this.transitionCounter = meterRegistry.counter("ai_sport_task_status_transition_total");
     }
 
     public AnalysisTask createQueuedTask(Long videoId) {
