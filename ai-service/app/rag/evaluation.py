@@ -134,7 +134,8 @@ def evaluate(
     failed_queries: List[str] = []
 
     for metric in metrics:
-        pytrec_key = metric.replace(",", "_")  # pytrec uses underscores
+        # pytrec_eval 输出键把 "." 转成 "_"，如 ndcg_cut.10 -> ndcg_cut_10
+        pytrec_key = metric.replace(".", "_")
         values = []
         for qid, scores in per_query_raw.items():
             if metric in scores:
@@ -155,7 +156,7 @@ def evaluate(
     per_query: Dict[str, Dict[str, float]] = {}
     for qid, scores in per_query_raw.items():
         per_query[qid] = {
-            m: round(scores.get(m, scores.get(m.replace(",", "_"), 0.0)), 4)
+            m: round(scores.get(m, scores.get(m.replace(".", "_"), 0.0)), 4)
             for m in metrics
         }
 
